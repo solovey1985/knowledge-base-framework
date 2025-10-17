@@ -1,0 +1,73 @@
+{
+  "name": "@solovey1985/knowledge-base-framework",
+  "version": "1.0.0",
+  "description": "A flexible framework for building markdown-based knowledge base and documentation portals with support for Mermaid diagrams, LaTeX math, and syntax highlighting",
+  "main": "lib/index.js",
+  "types": "lib/index.d.ts",
+  "bin": {
+    "kb": "lib/cli/kb.js"
+  },
+  "engines": {
+    "node": ">=16.0.0"
+  },
+  "scripts": {
+    "build": "tsc",
+    "build:watch": "tsc --watch",
+    "test": "jest",
+    "test:watch": "jest --watch",
+    "lint": "eslint src/**/*.ts",
+    "prepare": "npm run build",
+    "prepublishOnly": "npm run test && npm run lint"
+  },
+  "keywords": [
+    "documentation",
+    "markdown",
+    "knowledge-base",
+    "express",
+    "mermaid",
+    "latex",
+    "portal",
+    "static-site-generator"
+  ],
+  "author": "solovey1985",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/solovey1985/knowledge-base-framework.git"
+  },
+  "bugs": {
+    "url": "https://github.com/solovey1985/knowledge-base-framework/issues"
+  },
+  "homepage": "https://github.com/solovey1985/knowledge-base-framework#readme",
+  "files": [
+    "lib/**/*",
+    "templates/**/*",
+    "assets/**/*",
+    "README.md",
+    "LICENSE"
+  ],
+  "dependencies": {
+    "express": "^4.18.2",
+    "marked": "^16.2.0",
+    "highlight.js": "^11.11.1",
+    "chokidar": "^3.5.3",
+    "fs-extra": "^11.1.1",
+    "glob": "^10.3.10",
+    "mime-types": "^2.1.35"
+  },
+  "devDependencies": {
+    "@types/express": "^4.17.17",
+    "@types/fs-extra": "^11.0.1",
+    "@types/mime-types": "^2.1.1",
+    "@types/node": "^20.5.0",
+    "@typescript-eslint/eslint-plugin": "^6.4.0",
+    "@typescript-eslint/parser": "^6.4.0",
+    "eslint": "^8.47.0",
+    "jest": "^29.6.2",
+    "nodemon": "^3.0.1",
+    "typescript": "^5.1.6"
+  },
+  "peerDependencies": {
+    "express": "^4.18.0"
+  }
+}

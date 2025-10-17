@@ -1,0 +1,136 @@
+body {
+  font-family: Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI",
+    Roboto, "Helvetica Neue", Arial;
+  margin: 0;
+  background: #f7f7fb;
+  color: #111;
+}
+.topnav {
+  background: #fff;
+  border-bottom: 1px solid #e5e7eb;
+  padding: 0.5rem 1rem;
+}
+.topnav a {
+  color: #0366d6;
+  text-decoration: none;
+  margin-right: 0.75rem;
+}
+.container {
+  max-width:90%;
+  margin: 2rem auto;
+  padding: 1rem;
+  background: #fff;
+  border-radius: 6px;
+  box-shadow: 0 8px 20px rgba(11, 14, 22, 0.06);
+}
+/* VS Code-like code block styling */
+pre, code {
+  font-family: Consolas, 'Courier New', monospace;
+  font-size: 14px;
+}
+
+pre {
+  background: #1e1e1e;
+  color: #d4d4d4;
+  border-radius: 6px;
+  padding: 14px;
+  overflow-x: auto;
+}
+
+/* Remove empty code block and fix any broken rules */
+
+/* Foam link styling */
+.foam-link {
+  color: #6f42c1;
+  text-decoration: underline dotted;
+  font-weight: 500;
+}
+.foam-link:hover {
+  background: #f6f8fa;
+}
+
+/* Mermaid diagram styling */
+.mermaid {
+  background: #f6f8fa;
+  border-radius: 6px;
+  padding: 1em;
+  margin: 1.5em 0;
+  overflow-x: auto;
+}
+
+
+footer {
+  max-width: 860px;
+  margin: 1rem auto;
+  color: #6b7280;
+  padding: 0 1rem;
+}
+a {
+  color: #3300ff;
+}
+
+.markdown-body {
+  max-width: 800px;
+  font-size: 16px;
+}
+
+.markdown-body p {
+  font-size: 16px;
+  line-height: 1.9em;
+  margin-bottom: 1.2em;
+}
+
+.markdown-body li {
+  line-height: 1.9em;
+}
+
+input.task-list-item-checkbox {
+  margin-right: 4px;
+}
+
+img[src*="demo"] {
+  border: 1px #eee solid;
+  -webkit-box-shadow: 4px 4px 16px 0px rgba(50, 50, 50, 0.1);
+  -moz-box-shadow: 4px 4px 16px 0px rgba(50, 50, 50, 0.1);
+  box-shadow: 4px 4px 16px 0px rgba(50, 50, 50, 0.1);
+}
+
+@media only screen and (min-width: 1170px) {
+  img[src*="demo"] {
+    max-width: 130%;
+    margin-left: -15%;
+    margin-top: 20px;
+    margin-bottom: 20px;
+  }
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+blockquote {
+  font-family: Constantia, "Lucida Bright", Lucidabright, "Lucida Serif", Lucida,
+    "DejaVu Serif", "Bitstream Vera Serif", "Liberation Serif", Georgia, serif;
+}
+
+.wikilink:before {
+  content: "[[";
+  opacity: 0.5;
+}
+
+.wikilink:after {
+  content: "]]";
+  opacity: 0.5;
+}
+
+.github-only {
+  display: none;
+}
+
+.announcement {
+  background: #ede7ff;
+  padding: 4px 16px;
+  color: black;
+  border-radius: 4px;
+}
