@@ -1,0 +1,20 @@
+# Development sources
+src/
+client/
+tests/
+test/
+
+# Local tooling/cache
+node_modules/
+dist/
+coverage/
+.vscode/
+.idea/
+*.log
+
+# Project config not required in package
+tsconfig.json
+jest.config.*
+vite.config.ts
+.eslintrc*
+.prettier*
