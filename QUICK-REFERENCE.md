@@ -12,6 +12,7 @@ npm link               # Link globally for testing
 
 # CLI Usage
 kb init my-project     # Create new project
+kb update             # Refresh server/build/workflow templates
 kb serve              # Start dev server
 kb build              # Build static site
 ```

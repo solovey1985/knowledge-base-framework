@@ -1,2 +1,8 @@
 node_modules
 lib
+dist
+coverage
+.vscode
+.idea
+*.log
+*.tgz

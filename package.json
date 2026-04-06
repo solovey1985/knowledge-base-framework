@@ -11,7 +11,7 @@
     "node": ">=16.0.0"
   },
   "scripts": {
-    "build": "npm run build:assets && tsc",
+    "build": "npm run build:assets && tsc && node scripts/copy-service-templates.mjs",
     "build:assets": "vite build",
     "build:assets:watch": "vite build --watch",
     "build:watch": "tsc --watch",

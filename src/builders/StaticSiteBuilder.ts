@@ -4,7 +4,8 @@ import lunr from 'lunr';
 import { KnowledgeBase } from '../core/KnowledgeBase';
 import { KnowledgeBaseOptions, TemplateOptions } from '../core/interfaces';
 import { FileService } from '../services/FileService';
-import { TemplateRenderer, TemplateRenderContext, TemplateRendererOptions } from '../services/TemplateRenderer';
+import { TemplateRenderer, TemplateRendererOptions } from '../services/TemplateRenderer';
+import { TemplateContextBuilder } from '../services/TemplateContextBuilder';
 
 /**
  * Static site builder for knowledge base
@@ -21,6 +22,7 @@ export class StaticSiteBuilder {
   private knowledgeBase: KnowledgeBase;
   private options: KnowledgeBaseOptions;
   private templateRenderer: TemplateRenderer;
+  private contextBuilder: TemplateContextBuilder;
 
   constructor(options: KnowledgeBaseOptions) {
     // Force static site mode
@@ -30,6 +32,7 @@ export class StaticSiteBuilder {
     };
     this.knowledgeBase = new KnowledgeBase(this.options);
     this.templateRenderer = new TemplateRenderer(this.resolveTemplateOptions(this.options.templates));
+    this.contextBuilder = new TemplateContextBuilder(this.options, this.getStaticAssetsBase());
   }
 
   /**
@@ -146,167 +149,17 @@ export class StaticSiteBuilder {
    * Write HTML file with template
    */
   private async writeHtmlFile(filePath: string, content: any): Promise<void> {
-    const html = await this.templateRenderer.render(this.buildTemplateContext(content));
+    const html = await this.templateRenderer.render(this.contextBuilder.build(content));
     await fs.writeFile(filePath, html, 'utf-8');
   }
 
-  private buildTemplateContext(content: any): TemplateRenderContext {
-    const baseUrl = this.normalizeBaseUrl(this.options.baseUrl);
-    const searchEnabled = this.options.search?.enabled !== false;
-    const searchIndexFile = this.options.search?.indexFileName || 'search-index.json';
-    const navigation = this.mapNavigationItems(content.navigation || []);
-    const breadcrumbs = (content.breadcrumbs || []).map((crumb: any) => ({
-      title: crumb.title,
-      path: crumb.path,
-      href: this.composeHref(crumb.path, true)
-    }));
-
-    return {
-      site: {
-        title: this.options.title,
-        description: this.options.description,
-        baseUrl
-      },
-      page: {
-        title: content.title || this.options.title,
-        description: content.description || this.options.description,
-        metadata: content.metadata || {}
-      },
-      content,
-      navigation,
-      breadcrumbs,
-      assets: this.getAssetContext(baseUrl),
-      search: {
-        enabled: searchEnabled,
-        indexFileName: searchIndexFile
-      }
-    };
-  }
-
-  private mapNavigationItems(items: any[]): any[] {
-    if (!items || items.length === 0) {
-      return [];
+  private getStaticAssetsBase(): string {
+    const baseUrl = this.options.baseUrl || '';
+    if (!baseUrl || baseUrl === '/') {
+      return '/assets';
     }
-
-    return items.map(item => {
-      const isDirectory = item.children && item.children.length > 0;
-      return {
-        title: item.title,
-        path: item.path,
-        href: this.composeHref(item.path, isDirectory),
-        isDirectory,
-        isActive: item.isActive,
-        children: this.mapNavigationItems(item.children || [])
-      };
-    });
-  }
-
-  private composeHref(itemPath: string, isDirectory: boolean): string {
-    const normalized = this.normalizeSlashes(itemPath);
-    const suffix = isDirectory ? normalized : this.replaceMarkdownExtension(normalized);
-    const href = this.joinWithBase(this.options.baseUrl, suffix);
-    return isDirectory ? this.ensureTrailingSlash(href) : href;
-  }
-
-  private getAssetContext(baseUrl: string): { base: string; css: string[]; js: string[] } {
-    const assetBase = this.options.templates?.assetsBasePath
-      ? this.normalizePublicPath(this.options.templates.assetsBasePath)
-      : this.joinWithBase(baseUrl || '/', 'assets');
-
-    const css: string[] = [
-      `${assetBase}/kb-app.css`,
-      ...(this.options.customCssFiles || [])
-        .map(file => this.normalizePublicPath(file))
-        .filter(Boolean)
-    ];
-
-    const js: string[] = [
-      `${assetBase}/kb-app.js`,
-      ...(this.options.customJsFiles || [])
-        .map(file => this.normalizePublicPath(file))
-        .filter(Boolean)
-    ];
-
-    return {
-      base: assetBase,
-      css,
-      js
-    };
-  }
-
-  private normalizePublicPath(value: string): string {
-    if (!value) return '';
-    if (this.isHttpUrl(value)) {
-      return value;
-    }
-    return this.joinWithBase(this.options.baseUrl, value);
-  }
-
-  private normalizeBaseUrl(value?: string): string {
-    if (!value || value === '/') {
-      return '';
-    }
-    let normalized = value.trim();
-    if (!this.isHttpUrl(normalized) && !normalized.startsWith('/')) {
-      normalized = `/${normalized}`;
-    }
-    normalized = this.normalizeSlashes(normalized);
-    return this.removeTrailingSlash(normalized);
-  }
-
-  private joinWithBase(base?: string, suffix?: string): string {
-    const normalizedBase = this.normalizeBaseUrl(base);
-    const trimmedSuffix = suffix ? this.trimLeadingSlashes(this.normalizeSlashes(suffix)) : '';
-
-    if (this.isHttpUrl(normalizedBase)) {
-      const trimmedBase = this.removeTrailingSlash(normalizedBase);
-      return trimmedSuffix ? `${trimmedBase}/${trimmedSuffix}` : trimmedBase;
-    }
-
-    const parts = [normalizedBase, trimmedSuffix].filter(Boolean);
-    if (parts.length === 0) {
-      return '/';
-    }
-
-    const combined = parts.join('/');
-    const normalized = this.collapseSlashes(combined);
-    return normalized.startsWith('/') ? normalized : `/${normalized}`;
-  }
-
-  private ensureTrailingSlash(value: string): string {
-    return value.endsWith('/') ? value : `${value}/`;
-  }
-
-  private normalizeSlashes(input: string): string {
-    return input.split('\\').join('/');
-  }
-
-  private trimLeadingSlashes(value: string): string {
-    let result = value;
-    while (result.startsWith('/')) {
-      result = result.substring(1);
-    }
-    return result;
-  }
-
-  private removeTrailingSlash(value: string): string {
-    return value.endsWith('/') ? value.slice(0, -1) : value;
-  }
-
-  private replaceMarkdownExtension(value: string): string {
-    return value.endsWith('.md') ? `${value.slice(0, -3)}html` : value;
-  }
-
-  private isHttpUrl(value: string): boolean {
-    if (!value) {
-      return false;
-    }
-    const lower = value.toLowerCase();
-    return lower.startsWith('http://') || lower.startsWith('https://');
-  }
-
-  private collapseSlashes(value: string): string {
-    return value.replace(/\/+/g, '/');
+    const normalized = baseUrl.replace(/\/$/, '');
+    return `${normalized}/assets`;
   }
 
   private resolveTemplateOptions(templateOptions?: TemplateOptions): TemplateRendererOptions {
@@ -453,7 +306,7 @@ body {
         id: filePath,
         title: rendered.title || this.options.title || filePath,
         body: plainText,
-        url: this.composeHref(filePath, false),
+        url: this.getDocumentUrl(filePath),
         snippet: plainText.slice(0, 280)
       });
     }
@@ -487,6 +340,15 @@ body {
       .replace(/&nbsp;/g, ' ')
       .replace(/\s+/g, ' ')
       .trim();
+  }
+
+  private getDocumentUrl(markdownPath: string): string {
+    const normalized = markdownPath.replace(/\\/g, '/').replace(/\.md$/i, '.html');
+    const baseUrl = this.options.baseUrl || '';
+    if (!baseUrl || baseUrl === '/') {
+      return `/${normalized}`;
+    }
+    return `${baseUrl.replace(/\/$/, '')}/${normalized}`;
   }
 
   private async copyDirectory(source: string, target: string): Promise<void> {

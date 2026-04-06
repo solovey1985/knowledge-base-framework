@@ -1,6 +1,7 @@
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import Handlebars, { HelperOptions } from 'handlebars';
+import { RenderedContent } from '../core/models';
 
 export interface TemplateRendererOptions {
   templatesDir?: string;
@@ -11,7 +12,7 @@ export interface TemplateRendererOptions {
 export interface TemplateRenderContext {
   site: Record<string, unknown>;
   page: Record<string, unknown>;
-  content: Record<string, unknown>;
+  content: RenderedContent;
   navigation: unknown;
   breadcrumbs: unknown;
   assets: Record<string, unknown>;

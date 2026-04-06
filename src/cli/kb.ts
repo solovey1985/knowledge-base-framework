@@ -1,10 +1,14 @@
 import * as path from 'path';
 import * as fs from 'fs/promises';
 import express from 'express';
+import frameworkPackage from '../../package.json';
 import { KnowledgeBase, StaticSiteBuilder, KnowledgeBaseOptions } from '../index';
 import { ConfigError, loadConfigFile } from './configLoader';
 
 const templatesDir = path.join(__dirname, '..', 'service-templates');
+const FRAMEWORK_VERSION = `^${frameworkPackage.version}`;
+const EXPRESS_VERSION = '^4.18.2';
+const NODEMON_VERSION = '^3.0.1';
 
 /**
  * Simple template renderer for {{TOKEN}} replacement
@@ -27,6 +31,9 @@ async function main() {
     switch (command) {
         case 'init':
             await initProject(args[1]);
+            break;
+        case 'update':
+            await updateProject();
             break;
         case 'serve':
             await serveProject(args);
@@ -67,9 +74,9 @@ async function initProject(projectName?: string): Promise<void> {
         PROJECT_NAME: name,
         VERSION: '1.0.0',
         DESCRIPTION: `${name} - A comprehensive knowledge base`,
-        FRAMEWORK_VERSION: '^1.0.0',
-        EXPRESS_VERSION: '^4.18.2',
-        NODEMON_VERSION: '^3.0.1'
+        FRAMEWORK_VERSION,
+        EXPRESS_VERSION,
+        NODEMON_VERSION
     } as Record<string, string | number>;
 
     const packageTpl = await renderTemplate('package.template.json', packageTokens as any);
@@ -94,12 +101,86 @@ async function initProject(projectName?: string): Promise<void> {
     const readmeTpl = await renderTemplate('README.template.md', { PROJECT_NAME: name } as any);
     await fs.writeFile(path.join(projectDir, 'README.md'), readmeTpl);
 
+    const workflowDir = path.join(projectDir, '.github', 'workflows');
+    await fs.mkdir(workflowDir, { recursive: true });
+    const workflowTpl = await renderTemplate(path.join('.github', 'workflows', 'deploy.yml'), {
+        DEFAULT_BRANCH: 'main',
+        NODE_VERSION: '20',
+        OUTPUT_DIR: 'docs'
+    });
+    await fs.writeFile(path.join(workflowDir, 'deploy.yml'), workflowTpl);
+
+    await copyFrameworkAssets(projectDir, 'assets');
+
     console.log('✅ Project created successfully!');
     console.log('\nNext steps:');
     console.log(`  cd ${name}`);
     console.log('  npm install');
     console.log('  npm start');
     console.log('\nEdit kb.config.json to customize your site title, paths, and build output.');
+    console.log('Run `kb update` later to refresh server/build/workflow files after upgrading the framework.');
+}
+
+async function updateProject(): Promise<void> {
+    try {
+        const projectDir = process.cwd();
+        const { config } = await loadConfigFile();
+        console.log('🔄 Updating project files...');
+
+        const packagePath = path.join(projectDir, 'package.json');
+        const packageRaw = await fs.readFile(packagePath, 'utf-8');
+        const packageJson = JSON.parse(packageRaw);
+
+        packageJson.name = packageJson.name || config.title || 'knowledge-base';
+        packageJson.description = packageJson.description || `${packageJson.name} knowledge base`;
+        packageJson.version = packageJson.version || '1.0.0';
+
+        packageJson.scripts = packageJson.scripts || {};
+        packageJson.scripts.start = packageJson.scripts.start || 'node server.js';
+        packageJson.scripts.dev = packageJson.scripts.dev || 'nodemon server.js';
+        packageJson.scripts.build = 'node build.js';
+        packageJson.scripts['build:github'] = 'node build.js';
+        packageJson.scripts['build:watch'] = packageJson.scripts['build:watch'] || 'nodemon build.js';
+
+        packageJson.dependencies = packageJson.dependencies || {};
+        packageJson.dependencies['@solovey1985/knowledge-base-framework'] = FRAMEWORK_VERSION;
+        if (!packageJson.dependencies['express']) {
+            packageJson.dependencies['express'] = EXPRESS_VERSION;
+        }
+
+        packageJson.devDependencies = packageJson.devDependencies || {};
+        if (!packageJson.devDependencies['nodemon']) {
+            packageJson.devDependencies['nodemon'] = NODEMON_VERSION;
+        }
+
+        await fs.writeFile(packagePath, JSON.stringify(packageJson, null, 2));
+
+        const tokens = {
+            PROJECT_NAME: packageJson.name,
+            PORT: config.server?.port || 3000,
+            ASSETS_URL: '/assets',
+            ASSETS_DIR: 'assets'
+        } as Record<string, string | number>;
+
+        await fs.writeFile(path.join(projectDir, 'server.js'), await renderTemplate('server.template.js', tokens));
+        await fs.writeFile(path.join(projectDir, 'build.js'), await renderTemplate('build.template.js', tokens));
+        await fs.writeFile(path.join(projectDir, 'README.md'), await renderTemplate('README.template.md', { PROJECT_NAME: packageJson.name }));
+
+        const workflowDir = path.join(projectDir, '.github', 'workflows');
+        await fs.mkdir(workflowDir, { recursive: true });
+        const workflowTpl = await renderTemplate(path.join('.github', 'workflows', 'deploy.yml'), {
+            DEFAULT_BRANCH: 'main',
+            NODE_VERSION: '20',
+            OUTPUT_DIR: config.build?.outputDir || 'docs'
+        });
+        await fs.writeFile(path.join(workflowDir, 'deploy.yml'), workflowTpl);
+
+        await copyFrameworkAssets(projectDir, 'assets');
+
+        console.log('✅ Project files updated. Review git changes before committing.');
+    } catch (error) {
+        handleConfigError(error);
+    }
 }
 
 async function serveProject(args: string[]): Promise<void> {
@@ -151,6 +232,7 @@ Usage:
 
 Commands:
     init [name]     Create a new knowledge base project
+    update          Refresh scaffolded files (server/build/workflow)
     serve           Start development server  
     build           Build static site
     help            Show this help message
@@ -164,4 +246,14 @@ Examples:
 
 if (require.main === module) {
     main().catch(console.error);
+}
+
+async function copyFrameworkAssets(projectDir: string, destination: string): Promise<void> {
+    const frameworkAssetsDir = path.join(__dirname, '..', '..', 'templates', 'default', 'assets');
+    const targetDir = path.join(projectDir, destination);
+    await fs.mkdir(targetDir, { recursive: true });
+    const entries = await fs.readdir(frameworkAssetsDir);
+    for (const entry of entries) {
+        await fs.copyFile(path.join(frameworkAssetsDir, entry), path.join(targetDir, entry));
+    }
 }

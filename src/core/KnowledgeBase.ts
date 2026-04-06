@@ -1,11 +1,13 @@
 import { Express, Request, Response, NextFunction } from 'express';
 import * as path from 'path';
-import { KnowledgeBaseOptions } from '../core/interfaces';
+import { KnowledgeBaseOptions, TemplateOptions } from '../core/interfaces';
 import { FileService } from '../services/FileService';
 import { NavigationService } from '../services/NavigationService';
 import { MarkdownRenderer } from '../services/MarkdownRenderer';
 import { GitService } from '../services/GitService';
 import { RenderedContent } from '../core/models';
+import { TemplateRenderer, TemplateRendererOptions } from '../services/TemplateRenderer';
+import { TemplateContextBuilder } from '../services/TemplateContextBuilder';
 
 /**
  * Main Knowledge Base framework class
@@ -16,6 +18,8 @@ export class KnowledgeBase {
     private navigationService: NavigationService;
     private markdownRenderer: MarkdownRenderer;
     private gitService: GitService;
+    private templateRenderer: TemplateRenderer;
+    private templateContextBuilder: TemplateContextBuilder;
 
     constructor(options: KnowledgeBaseOptions) {
         this.options = this.mergeWithDefaults(options);
@@ -26,6 +30,9 @@ export class KnowledgeBase {
             baseUrl: this.options.baseUrl || ''
         });
         this.gitService = new GitService();
+        const assetsOverride = this.options.isStaticSite ? undefined : (this.options.templates?.assetsBasePath || '/assets');
+        this.templateRenderer = new TemplateRenderer(this.resolveTemplateOptions(this.options.templates));
+        this.templateContextBuilder = new TemplateContextBuilder(this.options, assetsOverride);
     }
 
     /**
@@ -126,6 +133,30 @@ export class KnowledgeBase {
         app.get('/', async (req: Request, res: Response) => {
             await this.handleIndexRequest(req, res);
         });
+
+        // Friendly HTML routes
+        app.get('*', async (req: Request, res: Response, next: NextFunction) => {
+            if (req.path.startsWith('/content') || req.path.startsWith('/assets')) {
+                return next();
+            }
+
+            const target = await this.mapFriendlyRequestPath(req.path);
+            if (target === null) {
+                return next();
+            }
+
+            try {
+                const content = await this.renderContent(target);
+                if (content) {
+                    const html = await this.templateRenderer.render(this.templateContextBuilder.build(content));
+                    res.send(html);
+                } else {
+                    next();
+                }
+            } catch (error) {
+                next(error);
+            }
+        });
     }
 
     /**
@@ -136,14 +167,15 @@ export class KnowledgeBase {
             const requestPath = (req as any).normalizedContentPath || req.params[0] || '';
             const content = await this.renderContent(requestPath);
 
-            if (content) {
-                res.json(content);
-            } else {
-                res.status(404).json({ error: 'Content not found' });
-            }
+                if (content) {
+                    const html = await this.templateRenderer.render(this.templateContextBuilder.build(content));
+                    res.send(html);
+                } else {
+                    res.status(404).send('Content not found');
+                }
         } catch (error) {
             console.error('Error handling content request:', error);
-            res.status(500).json({ error: 'Internal server error' });
+            res.status(500).send('Internal server error');
         }
     }
 
@@ -153,10 +185,15 @@ export class KnowledgeBase {
     private async handleIndexRequest(req: Request, res: Response): Promise<void> {
         try {
             const content = await this.renderContent('');
-            res.json(content);
+            if (content) {
+                const html = await this.templateRenderer.render(this.templateContextBuilder.build(content));
+                res.send(html);
+            } else {
+                res.status(404).send('Content not found');
+            }
         } catch (error) {
             console.error('Error handling index request:', error);
-            res.status(500).json({ error: 'Internal server error' });
+            res.status(500).send('Internal server error');
         }
     }
 
@@ -323,5 +360,64 @@ export class KnowledgeBase {
      */
     getGitService(): GitService {
         return this.gitService;
+    }
+
+    private resolveTemplateOptions(templateOptions?: TemplateOptions): TemplateRendererOptions {
+        if (!templateOptions) {
+            return {};
+        }
+
+        return {
+            templatesDir: templateOptions.directory
+                ? path.resolve(process.cwd(), templateOptions.directory)
+                : undefined,
+            layout: templateOptions.layout,
+            partialsDir: templateOptions.partialsDir
+                ? path.resolve(process.cwd(), templateOptions.partialsDir)
+                : undefined
+        };
+    }
+
+    private async mapFriendlyRequestPath(requestPath: string): Promise<string | null> {
+        try {
+            let decoded = decodeURIComponent(requestPath);
+            decoded = decoded.replace(/^\/+/, '');
+            if (!decoded) {
+                return '';
+            }
+
+            if (decoded.endsWith('/')) {
+                return decoded.replace(/\/+$/, '');
+            }
+
+            if (decoded.toLowerCase().endsWith('.html')) {
+                const base = decoded.replace(/\.html?$/i, '');
+                if (await this.fileService.exists(base)) {
+                    return base;
+                }
+                if (!path.extname(base)) {
+                    const markdownCandidate = `${base}.md`;
+                    if (await this.fileService.exists(markdownCandidate)) {
+                        return markdownCandidate;
+                    }
+                }
+                return base;
+            }
+
+            if (await this.fileService.isDirectory(decoded)) {
+                return decoded;
+            }
+
+            if (!path.extname(decoded)) {
+                const markdownCandidate = `${decoded}.md`;
+                if (await this.fileService.exists(markdownCandidate)) {
+                    return markdownCandidate;
+                }
+            }
+
+            return decoded;
+        } catch (error) {
+            return null;
+        }
     }
 }

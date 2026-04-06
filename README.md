@@ -62,6 +62,16 @@ app.listen(3000, () => {
 });
 ```
 
+### Upgrading Existing Projects
+
+After bumping `@solovey1985/knowledge-base-framework` in a project, run:
+
+```bash
+kb update
+```
+
+to refresh `server.js`, `build.js`, `.github/workflows/deploy.yml`, README, and `package.json` scripts.
+
 ## Configuration
 
 Create a `kb.config.json` file:
@@ -184,6 +194,8 @@ npm run build
 
 Then commit and push the `docs/` directory.
 
+Scaffolded projects also include `.github/workflows/deploy.yml`, which mirrors the second-brain deployment: every push to `main` runs `npm ci`, executes `npm run build:github`, and publishes `docs/` to the `gh-pages` branch via `peaceiris/actions-gh-pages`. Enable it by choosing **Settings → Pages → Deploy from branch → gh-pages (/)**.
+
 ### Netlify/Vercel
 
 Set `build.target` to `"local"` and deploy the `docs/` directory.
@@ -191,6 +203,7 @@ Set `build.target` to `"local"` and deploy the `docs/` directory.
 ## CLI Commands
 
 - `kb init [name]` - Create new project
+- `kb update` - Refresh server/build/workflow templates after upgrading the framework
 - `kb serve` - Start development server  
 - `kb build` - Build static site
 - `kb help` - Show help
