@@ -2,6 +2,7 @@ import * as path from 'path';
 import * as fs from 'fs/promises';
 import express from 'express';
 import { KnowledgeBase, StaticSiteBuilder, KnowledgeBaseOptions } from '../index';
+import { ConfigError, loadConfigFile } from './configLoader';
 
 const templatesDir = path.join(__dirname, '..', 'service-templates');
 
@@ -75,6 +76,12 @@ async function initProject(projectName?: string): Promise<void> {
     const packageObj = JSON.parse(packageTpl);
     await fs.writeFile(path.join(projectDir, 'package.json'), JSON.stringify(packageObj, null, 2));
 
+    const configTpl = await renderTemplate('kb.config.template.json', { PROJECT_NAME: name } as any);
+    await fs.writeFile(path.join(projectDir, 'kb.config.json'), configTpl);
+
+    const gitignoreTemplate = await fs.readFile(path.join(templatesDir, '.gitignore.template'), 'utf-8');
+    await fs.writeFile(path.join(projectDir, '.gitignore'), gitignoreTemplate);
+
     // Render and write server, build and README
     const tokens = { PROJECT_NAME: name, PORT: 3000, ASSETS_URL: '/assets', ASSETS_DIR: 'assets' } as Record<string, string | number>;
 
@@ -87,52 +94,52 @@ async function initProject(projectName?: string): Promise<void> {
     const readmeTpl = await renderTemplate('README.template.md', { PROJECT_NAME: name } as any);
     await fs.writeFile(path.join(projectDir, 'README.md'), readmeTpl);
 
-    console.log(`✅ Project created successfully!`);
-    console.log(`\nNext steps:`);
+    console.log('✅ Project created successfully!');
+    console.log('\nNext steps:');
     console.log(`  cd ${name}`);
-    console.log(`  npm install`);
-    console.log(`  npm start`);
+    console.log('  npm install');
+    console.log('  npm start');
+    console.log('\nEdit kb.config.json to customize your site title, paths, and build output.');
 }
 
 async function serveProject(args: string[]): Promise<void> {
-    const configPath = findConfigFile();
-    if (!configPath) {
-        console.error('❌ No configuration file found. Run "kb init" first.');
-        return;
+    try {
+        const { config } = await loadConfigFile();
+
+        const app = express();
+        const kb = new KnowledgeBase({ ...config, contentRootPath: path.resolve(config.contentRootPath) });
+
+        kb.setupMiddleware(app);
+
+        const port = config.server?.port || 3000;
+        app.listen(port, () => {
+            console.log(`📚 Knowledge Base running at http://localhost:${port}`);
+        });
+    } catch (error) {
+        handleConfigError(error);
     }
-
-    const config = JSON.parse(await fs.readFile(configPath, 'utf-8')) as KnowledgeBaseOptions;
-
-    const app = express();
-    const kb = new KnowledgeBase({ ...config, contentRootPath: path.resolve(config.contentRootPath) });
-
-    kb.setupMiddleware(app);
-
-    const port = config.server?.port || 3000;
-    app.listen(port, () => {
-        console.log(`📚 Knowledge Base running at http://localhost:${port}`);
-    });
 }
 
 async function buildProject(args: string[]): Promise<void> {
-    const configPath = findConfigFile();
-    if (!configPath) {
-        console.error('❌ No configuration file found. Run "kb init" first.');
+    try {
+        const { config } = await loadConfigFile();
+
+        const builder = new StaticSiteBuilder({ ...config, contentRootPath: path.resolve(config.contentRootPath), isStaticSite: true });
+        await builder.build();
+    } catch (error) {
+        handleConfigError(error);
+    }
+}
+
+function handleConfigError(error: unknown): void {
+    if (error instanceof ConfigError) {
+        console.error(`❌ ${error.message}`);
+        process.exitCode = 1;
         return;
     }
 
-    const config = JSON.parse(await fs.readFile(configPath, 'utf-8')) as KnowledgeBaseOptions;
-
-    const builder = new StaticSiteBuilder({ ...config, contentRootPath: path.resolve(config.contentRootPath), isStaticSite: true });
-    await builder.build();
-}
-
-function findConfigFile(): string | null {
-    const possibleNames = ['kb.config.json', 'knowledge-base.config.json', 'config.json'];
-    for (const name of possibleNames) {
-        if (require('fs').existsSync(name)) return name;
-    }
-    return null;
+    console.error('❌ Unexpected error while processing configuration:', error);
+    process.exitCode = 1;
 }
 
 function showHelp(): void {

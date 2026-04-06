@@ -1,0 +1,19 @@
+{
+  "contentRootPath": "./content",
+  "title": "{{PROJECT_NAME}}",
+  "description": "{{PROJECT_NAME}} knowledge base",
+  "baseUrl": "",
+  "server": {
+    "port": 3000
+  },
+  "build": {
+    "outputDir": "./docs",
+    "clean": true,
+    "generateSitemap": false,
+    "generateRobots": false
+  },
+  "search": {
+    "enabled": true,
+    "indexFileName": "search-index.json"
+  }
+}

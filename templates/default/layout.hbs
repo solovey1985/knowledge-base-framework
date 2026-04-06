@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{page.title}} • {{site.title}}</title>
+  <meta name="description" content="{{page.description}}">
+  {{#each assets.css}}
+    <link rel="stylesheet" href="{{this}}">
+  {{/each}}
+</head>
+<body data-base-url="{{site.baseUrl}}" data-kb-search-index="{{search.indexFileName}}">
+  <div class="kb-overlay" data-kb-overlay></div>
+  <button class="kb-mobile-toggle" data-kb-open-drawer aria-label="Open navigation">
+    <span></span>
+  </button>
+
+  <div class="kb-shell">
+    <aside class="kb-sidebar" data-kb-sidebar>
+      <div class="kb-sidebar__header">
+        <button class="kb-mobile-close" data-kb-close-drawer aria-label="Close navigation">✕</button>
+        <h2 class="kb-sidebar__title">
+          <a href="{{#if site.baseUrl}}{{site.baseUrl}}{{else}}/{{/if}}">{{site.title}}</a>
+        </h2>
+        <p class="kb-sidebar__subtitle">{{site.description}}</p>
+        {{#if search.enabled}}
+          <button class="kb-search-trigger" data-kb-search-trigger>
+            <span>Search docs</span>
+            <kbd>/</kbd>
+          </button>
+        {{/if}}
+      </div>
+
+      <div class="kb-sidebar__actions">
+        <button data-kb-expand-nav>Expand all</button>
+        <button data-kb-collapse-nav>Collapse all</button>
+      </div>
+
+      <nav class="kb-nav" data-kb-nav>
+        {{> navigation items=navigation}}
+      </nav>
+    </aside>
+
+    <main class="kb-content">
+      <div class="kb-content__inner">
+        <div class="kb-content__card">
+          {{#if breadcrumbs.length}}
+            <div class="kb-breadcrumb">
+              {{#each breadcrumbs}}
+                <a href="{{href}}">{{title}}</a>
+              {{/each}}
+            </div>
+          {{/if}}
+
+          <article class="kb-article">
+            {{{content.htmlContent}}}
+          </article>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  {{#each assets.js}}
+    <script src="{{this}}" defer></script>
+  {{/each}}
+</body>
+</html>

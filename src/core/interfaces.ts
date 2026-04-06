@@ -42,6 +42,12 @@ export interface KnowledgeBaseOptions {
   
   /** Build configuration */
   build?: BuildOptions;
+
+  /** Template customization options */
+  templates?: TemplateOptions;
+
+  /** Search configuration */
+  search?: SearchOptions;
 }
 
 export interface NavigationOptions {
@@ -90,4 +96,26 @@ export interface BuildOptions {
   
   /** Generate robots.txt */
   generateRobots?: boolean;
+}
+
+export interface TemplateOptions {
+  /** Directory containing layout + partial templates */
+  directory?: string;
+
+  /** Custom layout filename */
+  layout?: string;
+
+  /** Custom partials directory */
+  partialsDir?: string;
+
+  /** Override public assets base path */
+  assetsBasePath?: string;
+}
+
+export interface SearchOptions {
+  /** Enable or disable built-in search */
+  enabled?: boolean;
+
+  /** Output filename for the search index */
+  indexFileName?: string;
 }

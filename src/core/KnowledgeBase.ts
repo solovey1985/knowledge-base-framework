@@ -65,6 +65,16 @@ export class KnowledgeBase {
                 generateSitemap: options.build?.generateSitemap || false,
                 generateRobots: options.build?.generateRobots || false,
                 ...options.build
+            },
+            templates: {
+                directory: options.templates?.directory,
+                layout: options.templates?.layout,
+                partialsDir: options.templates?.partialsDir,
+                assetsBasePath: options.templates?.assetsBasePath
+            },
+            search: {
+                enabled: options.search?.enabled !== false,
+                indexFileName: options.search?.indexFileName || 'search-index.json'
             }
         };
     }

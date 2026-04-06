@@ -1,0 +1,33 @@
+{{#if items}}
+  <ul class="kb-nav-list">
+    {{#each items}}
+      <li
+        class="kb-nav-item {{#if isDirectory}}is-directory{{/if}} {{#if isActive}}is-active{{/if}}"
+        data-kb-nav-item
+        data-path="{{path}}"
+      >
+        <div class="kb-nav-row">
+          {{#if isDirectory}}
+            <button class="kb-nav-toggle" data-kb-nav-toggle aria-expanded="true">
+              <span class="kb-nav-toggle-icon">▾</span>
+            </button>
+          {{else}}
+            <span class="kb-nav-toggle-spacer"></span>
+          {{/if}}
+
+          <a class="kb-nav-link" data-kb-nav-link data-target-path="{{path}}" href="{{href}}">
+            {{title}}
+          </a>
+        </div>
+
+        {{#if children.length}}
+          <div class="kb-nav-children" data-kb-nav-children>
+            {{> navigation items=children}}
+          </div>
+        {{/if}}
+      </li>
+    {{/each}}
+  </ul>
+{{else}}
+  <p class="kb-nav-empty">No navigation items found.</p>
+{{/if}}

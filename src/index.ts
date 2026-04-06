@@ -4,6 +4,7 @@ export { NavigationService } from './services/NavigationService';
 export { MarkdownRenderer } from './services/MarkdownRenderer';
 export { GitService } from './services/GitService';
 export { StaticSiteBuilder } from './builders/StaticSiteBuilder';
+export { TemplateRenderer } from './services/TemplateRenderer';
 
 export * from './core/interfaces';
 export * from './core/models';
@@ -13,7 +14,9 @@ export type {
   KnowledgeBaseOptions,
   NavigationOptions,
   ServerOptions,
-  BuildOptions
+  BuildOptions,
+  TemplateOptions,
+  SearchOptions
 } from './core/interfaces';
 
 export type {

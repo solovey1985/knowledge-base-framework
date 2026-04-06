@@ -1,14 +1,26 @@
 import * as fs from 'fs/promises';
 import * as path from 'path';
+import lunr from 'lunr';
 import { KnowledgeBase } from '../core/KnowledgeBase';
-import { KnowledgeBaseOptions } from '../core/interfaces';
+import { KnowledgeBaseOptions, TemplateOptions } from '../core/interfaces';
+import { FileService } from '../services/FileService';
+import { TemplateRenderer, TemplateRenderContext, TemplateRendererOptions } from '../services/TemplateRenderer';
 
 /**
  * Static site builder for knowledge base
  */
+interface SearchDocument {
+  id: string;
+  title: string;
+  body: string;
+  url: string;
+  snippet: string;
+}
+
 export class StaticSiteBuilder {
   private knowledgeBase: KnowledgeBase;
   private options: KnowledgeBaseOptions;
+  private templateRenderer: TemplateRenderer;
 
   constructor(options: KnowledgeBaseOptions) {
     // Force static site mode
@@ -17,6 +29,7 @@ export class StaticSiteBuilder {
       isStaticSite: true
     };
     this.knowledgeBase = new KnowledgeBase(this.options);
+    this.templateRenderer = new TemplateRenderer(this.resolveTemplateOptions(this.options.templates));
   }
 
   /**
@@ -40,6 +53,9 @@ export class StaticSiteBuilder {
 
     // Copy assets
     await this.copyAssets(outputDir);
+
+    // Build search index
+    await this.buildSearchIndex(outputDir);
 
     // Generate additional files
     if (this.options.build?.generateSitemap) {
@@ -88,10 +104,10 @@ export class StaticSiteBuilder {
           if (await fileService.exists(indexPath)) {
             const content = await this.knowledgeBase.renderContent(item.path);
             if (content) {
-              const htmlPath = path.join(outputDir, item.path, 'index.html');
-              await this.writeHtmlFile(htmlPath, content);
-            }
-          }
+          const htmlPath = path.join(outputDir, item.path, 'index.html');
+          await this.writeHtmlFile(htmlPath, content);
+        }
+      }
         } else if (item.extension === '.md') {
           // Build markdown file
           const content = await this.knowledgeBase.renderContent(item.path);
@@ -130,107 +146,183 @@ export class StaticSiteBuilder {
    * Write HTML file with template
    */
   private async writeHtmlFile(filePath: string, content: any): Promise<void> {
-    const html = this.generateHtmlTemplate(content);
+    const html = await this.templateRenderer.render(this.buildTemplateContext(content));
     await fs.writeFile(filePath, html, 'utf-8');
   }
 
-  /**
-   * Generate HTML template
-   */
-  private generateHtmlTemplate(content: any): string {
-    const baseUrl = this.options.baseUrl || '';
-    const title = content.title || this.options.title;
-    
-    return `<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>${title}</title>
-    <meta name="description" content="${content.description || this.options.description}">
-    ${this.options.enableMath ? '<script src="https://polyfill.io/v3/polyfill.min.js?features=es6"></script>' : ''}
-    ${this.options.enableMath ? '<script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>' : ''}
-    ${this.options.enableSyntaxHighlighting ? '<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.11.1/styles/default.min.css">' : ''}
-    <link rel="stylesheet" href="${baseUrl}/style.css">
-    <link rel="stylesheet" href="${baseUrl}/markdown.css">
-    <link rel="stylesheet" href="${baseUrl}/assets/css/style.css">
-    ${this.options.customCssFiles?.map(css => `<link rel="stylesheet" href="${baseUrl}/${css}">`).join('\n    ') || ''}
-</head>
-<body>
-    <div id="app">
-        <nav class="sidebar">
-            <div class="nav-header">
-                <h2><a href="${baseUrl}/">${this.options.title}</a></h2>
-            </div>
-            <div class="nav-content">
-                ${this.renderNavigation(content.navigation || [])}
-            </div>
-        </nav>
-        
-        <main class="main-content">
-            ${content.breadcrumbs && content.breadcrumbs.length > 0 ? `
-            <nav class="breadcrumb">
-                ${content.breadcrumbs.map((item: any) => 
-                    `<a href="${baseUrl}/content/${item.path}.html">${item.title}</a>`
-                ).join(' / ')}
-            </nav>
-            ` : ''}
-            
-            <article class="content">
-                ${content.htmlContent}
-            </article>
-        </main>
-    </div>
+  private buildTemplateContext(content: any): TemplateRenderContext {
+    const baseUrl = this.normalizeBaseUrl(this.options.baseUrl);
+    const searchEnabled = this.options.search?.enabled !== false;
+    const searchIndexFile = this.options.search?.indexFileName || 'search-index.json';
+    const navigation = this.mapNavigationItems(content.navigation || []);
+    const breadcrumbs = (content.breadcrumbs || []).map((crumb: any) => ({
+      title: crumb.title,
+      path: crumb.path,
+      href: this.composeHref(crumb.path, true)
+    }));
 
-    ${this.options.enableMermaid ? '<script src="https://cdn.jsdelivr.net/npm/mermaid/dist/mermaid.min.js"></script>' : ''}
-    <script src="${baseUrl}/mermaid-init.js"></script>
-    <script src="${baseUrl}/app.js"></script>
-    <script src="${baseUrl}/assets/js/app.js"></script>
-    <script src="${baseUrl}/assets/js/mermaid-init.js"></script>
-    ${this.options.enableMermaid ? '<script>mermaid.initialize({startOnLoad:true});</script>' : ''}
-    ${this.options.enableSyntaxHighlighting ? '<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.11.1/highlight.min.js"></script>' : ''}
-    ${this.options.enableSyntaxHighlighting ? '<script>hljs.highlightAll();</script>' : ''}
-    ${this.options.customJsFiles?.map(js => `<script src="${baseUrl}/${js}"></script>`).join('\n    ') || ''}
-</body>
-</html>`;
+    return {
+      site: {
+        title: this.options.title,
+        description: this.options.description,
+        baseUrl
+      },
+      page: {
+        title: content.title || this.options.title,
+        description: content.description || this.options.description,
+        metadata: content.metadata || {}
+      },
+      content,
+      navigation,
+      breadcrumbs,
+      assets: this.getAssetContext(baseUrl),
+      search: {
+        enabled: searchEnabled,
+        indexFileName: searchIndexFile
+      }
+    };
   }
 
-  /**
-   * Render navigation HTML
-   */
-  private renderNavigation(navigation: any[]): string {
-    if (!navigation || navigation.length === 0) return '';
-    
-    const baseUrl = this.options.baseUrl || '';
-    
-    const renderItem = (item: any): string => {
-      const hasChildren = item.children && item.children.length > 0;
-      const href = item.path.endsWith('.md') 
-        ? `${baseUrl}/content/${item.path.replace(/\.md$/, '.html')}`
-        : `${baseUrl}/content/${item.path}/`;
-      
-      let html = `<li class="${item.isActive ? 'active' : ''}">`;
-      html += `<a href="${href}">${item.title}</a>`;
-      
-      if (hasChildren) {
-        html += '<ul>';
-        for (const child of item.children) {
-          html += renderItem(child);
-        }
-        html += '</ul>';
-      }
-      
-      html += '</li>';
-      return html;
-    };
-    
-    let html = '<ul class="nav-list">';
-    for (const item of navigation) {
-      html += renderItem(item);
+  private mapNavigationItems(items: any[]): any[] {
+    if (!items || items.length === 0) {
+      return [];
     }
-    html += '</ul>';
-    
-    return html;
+
+    return items.map(item => {
+      const isDirectory = item.children && item.children.length > 0;
+      return {
+        title: item.title,
+        path: item.path,
+        href: this.composeHref(item.path, isDirectory),
+        isDirectory,
+        isActive: item.isActive,
+        children: this.mapNavigationItems(item.children || [])
+      };
+    });
+  }
+
+  private composeHref(itemPath: string, isDirectory: boolean): string {
+    const normalized = this.normalizeSlashes(itemPath);
+    const suffix = isDirectory ? normalized : this.replaceMarkdownExtension(normalized);
+    const href = this.joinWithBase(this.options.baseUrl, suffix);
+    return isDirectory ? this.ensureTrailingSlash(href) : href;
+  }
+
+  private getAssetContext(baseUrl: string): { base: string; css: string[]; js: string[] } {
+    const assetBase = this.options.templates?.assetsBasePath
+      ? this.normalizePublicPath(this.options.templates.assetsBasePath)
+      : this.joinWithBase(baseUrl || '/', 'assets');
+
+    const css: string[] = [
+      `${assetBase}/kb-app.css`,
+      ...(this.options.customCssFiles || [])
+        .map(file => this.normalizePublicPath(file))
+        .filter(Boolean)
+    ];
+
+    const js: string[] = [
+      `${assetBase}/kb-app.js`,
+      ...(this.options.customJsFiles || [])
+        .map(file => this.normalizePublicPath(file))
+        .filter(Boolean)
+    ];
+
+    return {
+      base: assetBase,
+      css,
+      js
+    };
+  }
+
+  private normalizePublicPath(value: string): string {
+    if (!value) return '';
+    if (this.isHttpUrl(value)) {
+      return value;
+    }
+    return this.joinWithBase(this.options.baseUrl, value);
+  }
+
+  private normalizeBaseUrl(value?: string): string {
+    if (!value || value === '/') {
+      return '';
+    }
+    let normalized = value.trim();
+    if (!this.isHttpUrl(normalized) && !normalized.startsWith('/')) {
+      normalized = `/${normalized}`;
+    }
+    normalized = this.normalizeSlashes(normalized);
+    return this.removeTrailingSlash(normalized);
+  }
+
+  private joinWithBase(base?: string, suffix?: string): string {
+    const normalizedBase = this.normalizeBaseUrl(base);
+    const trimmedSuffix = suffix ? this.trimLeadingSlashes(this.normalizeSlashes(suffix)) : '';
+
+    if (this.isHttpUrl(normalizedBase)) {
+      const trimmedBase = this.removeTrailingSlash(normalizedBase);
+      return trimmedSuffix ? `${trimmedBase}/${trimmedSuffix}` : trimmedBase;
+    }
+
+    const parts = [normalizedBase, trimmedSuffix].filter(Boolean);
+    if (parts.length === 0) {
+      return '/';
+    }
+
+    const combined = parts.join('/');
+    const normalized = this.collapseSlashes(combined);
+    return normalized.startsWith('/') ? normalized : `/${normalized}`;
+  }
+
+  private ensureTrailingSlash(value: string): string {
+    return value.endsWith('/') ? value : `${value}/`;
+  }
+
+  private normalizeSlashes(input: string): string {
+    return input.split('\\').join('/');
+  }
+
+  private trimLeadingSlashes(value: string): string {
+    let result = value;
+    while (result.startsWith('/')) {
+      result = result.substring(1);
+    }
+    return result;
+  }
+
+  private removeTrailingSlash(value: string): string {
+    return value.endsWith('/') ? value.slice(0, -1) : value;
+  }
+
+  private replaceMarkdownExtension(value: string): string {
+    return value.endsWith('.md') ? `${value.slice(0, -3)}html` : value;
+  }
+
+  private isHttpUrl(value: string): boolean {
+    if (!value) {
+      return false;
+    }
+    const lower = value.toLowerCase();
+    return lower.startsWith('http://') || lower.startsWith('https://');
+  }
+
+  private collapseSlashes(value: string): string {
+    return value.replace(/\/+/g, '/');
+  }
+
+  private resolveTemplateOptions(templateOptions?: TemplateOptions): TemplateRendererOptions {
+    if (!templateOptions) {
+      return {};
+    }
+
+    return {
+      templatesDir: templateOptions.directory
+        ? path.resolve(process.cwd(), templateOptions.directory)
+        : undefined,
+      layout: templateOptions.layout,
+      partialsDir: templateOptions.partialsDir
+        ? path.resolve(process.cwd(), templateOptions.partialsDir)
+        : undefined
+    };
   }
 
   /**
@@ -239,64 +331,25 @@ export class StaticSiteBuilder {
   private async copyAssets(outputDir: string): Promise<void> {
     console.log('📦 Copying framework assets...');
     
-    // Get the framework assets directory
     const frameworkRoot = path.resolve(__dirname, '../../');
-    const frameworkAssetsDir = path.join(frameworkRoot, 'src', 'assets');
-    
-    // Create output assets directories
+    const templateAssetsDir = path.join(frameworkRoot, 'templates', 'default', 'assets');
     const outputAssetsDir = path.join(outputDir, 'assets');
-    const outputCssDir = path.join(outputAssetsDir, 'css');
-    const outputJsDir = path.join(outputAssetsDir, 'js');
-    
-    await fs.mkdir(outputCssDir, { recursive: true });
-    await fs.mkdir(outputJsDir, { recursive: true });
     
     try {
-      // Copy CSS files
-      const cssSourceDir = path.join(frameworkAssetsDir, 'styles');
-      const cssFiles = await fs.readdir(cssSourceDir);
-      
-      for (const cssFile of cssFiles) {
-        if (cssFile.endsWith('.css')) {
-          const sourcePath = path.join(cssSourceDir, cssFile);
-          const targetPath = path.join(outputCssDir, cssFile);
-          await fs.copyFile(sourcePath, targetPath);
-          console.log(`  ✓ Copied ${cssFile}`);
+      await fs.mkdir(outputAssetsDir, { recursive: true });
+      await this.copyDirectory(templateAssetsDir, outputAssetsDir);
+
+      // Ensure legacy consumers can still access core files from site root
+      const criticalFiles = ['kb-app.css', 'kb-app.js'];
+      for (const assetName of criticalFiles) {
+        const sourcePath = path.join(templateAssetsDir, assetName);
+        if (await this.pathExists(sourcePath)) {
+          await fs.copyFile(sourcePath, path.join(outputDir, assetName));
         }
       }
-      
-      // Copy JavaScript files
-      const jsSourceDir = path.join(frameworkAssetsDir, 'scripts');
-      const jsFiles = await fs.readdir(jsSourceDir);
-      
-      for (const jsFile of jsFiles) {
-        if (jsFile.endsWith('.js')) {
-          const sourcePath = path.join(jsSourceDir, jsFile);
-          const targetPath = path.join(outputJsDir, jsFile);
-          await fs.copyFile(sourcePath, targetPath);
-          console.log(`  ✓ Copied ${jsFile}`);
-        }
-      }
-      
-      // Also copy to root level for compatibility with existing templates
-      for (const cssFile of cssFiles) {
-        if (cssFile.endsWith('.css')) {
-          const sourcePath = path.join(cssSourceDir, cssFile);
-          const targetPath = path.join(outputDir, cssFile);
-          await fs.copyFile(sourcePath, targetPath);
-        }
-      }
-      
-      for (const jsFile of jsFiles) {
-        if (jsFile.endsWith('.js')) {
-          const sourcePath = path.join(jsSourceDir, jsFile);
-          const targetPath = path.join(outputDir, jsFile);
-          await fs.copyFile(sourcePath, targetPath);
-        }
-      }
-      
+      console.log('  ✓ Framework assets copied');
     } catch (error) {
-      console.warn('⚠️ Could not copy some framework assets:', error instanceof Error ? error.message : 'Unknown error');
+      console.warn('⚠️ Could not copy bundled assets:', error instanceof Error ? error.message : 'Unknown error');
       console.log('   Creating fallback basic styles...');
       
       // Fallback: create basic CSS if framework assets aren't available
@@ -337,8 +390,127 @@ body {
 }
 `;
       
-      await fs.writeFile(path.join(outputCssDir, 'style.css'), basicCss);
-      await fs.writeFile(path.join(outputDir, 'style.css'), basicCss);
+      await fs.mkdir(outputAssetsDir, { recursive: true });
+      await fs.writeFile(path.join(outputAssetsDir, 'kb-app.css'), basicCss, 'utf-8');
+      await fs.writeFile(path.join(outputDir, 'kb-app.css'), basicCss, 'utf-8');
+    }
+  }
+
+  private async buildSearchIndex(outputDir: string): Promise<void> {
+    if (this.options.search?.enabled === false) {
+      return;
+    }
+
+    console.log('🔎 Generating search index...');
+    const documents = await this.collectSearchDocuments();
+    if (documents.length === 0) {
+      console.log('  ⚠️ No markdown documents found for search index.');
+      return;
+    }
+
+    const index = lunr(function () {
+      this.ref('id');
+      this.field('title');
+      this.field('body');
+
+      documents.forEach(doc => this.add(doc));
+    });
+    const payload = {
+      index: index.toJSON(),
+      documents: documents.map(doc => ({
+        id: doc.id,
+        title: doc.title,
+        url: doc.url,
+        snippet: doc.snippet
+      }))
+    };
+
+    const fileName = this.options.search?.indexFileName || 'search-index.json';
+    await fs.writeFile(
+      path.join(outputDir, fileName),
+      JSON.stringify(payload, null, 2),
+      'utf-8'
+    );
+  }
+
+  private async collectSearchDocuments(): Promise<SearchDocument[]> {
+    const fileService = this.knowledgeBase.getFileService();
+    const markdownFiles = await this.collectMarkdownFiles(fileService);
+    const documents: SearchDocument[] = [];
+
+    for (const filePath of markdownFiles) {
+      const rendered = await this.knowledgeBase.renderContent(filePath);
+      if (!rendered || !rendered.htmlContent) {
+        continue;
+      }
+
+      const plainText = this.stripHtml(rendered.htmlContent);
+      if (!plainText) {
+        continue;
+      }
+
+      documents.push({
+        id: filePath,
+        title: rendered.title || this.options.title || filePath,
+        body: plainText,
+        url: this.composeHref(filePath, false),
+        snippet: plainText.slice(0, 280)
+      });
+    }
+
+    return documents;
+  }
+
+  private async collectMarkdownFiles(fileService: FileService, currentPath = ''): Promise<string[]> {
+    const files: string[] = [];
+
+    try {
+      const entries = await fileService.getDirectoryListing(currentPath);
+      for (const entry of entries) {
+        if (entry.isDirectory) {
+          const nested = await this.collectMarkdownFiles(fileService, entry.path);
+          files.push(...nested);
+        } else if (entry.extension === '.md') {
+          files.push(entry.path);
+        }
+      }
+    } catch (error) {
+      console.warn('⚠️ Unable to inspect directory for search index:', error instanceof Error ? error.message : error);
+    }
+
+    return files;
+  }
+
+  private stripHtml(value: string): string {
+    return value
+      .replace(/<[^>]+>/g, ' ')
+      .replace(/&nbsp;/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+  }
+
+  private async copyDirectory(source: string, target: string): Promise<void> {
+    const entries = await fs.readdir(source, { withFileTypes: true });
+    await fs.mkdir(target, { recursive: true });
+
+    for (const entry of entries) {
+      const sourcePath = path.join(source, entry.name);
+      const targetPath = path.join(target, entry.name);
+
+      if (entry.isDirectory()) {
+        await this.copyDirectory(sourcePath, targetPath);
+      } else {
+        await fs.copyFile(sourcePath, targetPath);
+      }
+    }
+  }
+
+  private async pathExists(location: string): Promise<boolean> {
+    try {
+      await fs.access(location);
+      return true;
+    } catch (error) {
+      return false;
     }
   }
 
