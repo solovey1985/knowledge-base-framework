@@ -112,18 +112,19 @@ export class StaticSiteBuilder {
         }
       }
         } else if (item.extension === '.md') {
-          // Build markdown file
           const content = await this.knowledgeBase.renderContent(item.path);
           if (content) {
-            const htmlPath = path.join(
-              outputDir, 
-              item.path.replace(/\.md$/, '.html')
-            );
+            const htmlPath = path.join(outputDir, item.path.replace(/\.md$/, '.html'));
             await fs.mkdir(path.dirname(htmlPath), { recursive: true });
             await this.writeHtmlFile(htmlPath, content);
           }
         } else {
-          // Copy other files as-is
+          const content = await this.knowledgeBase.renderContent(item.path);
+          if (content) {
+            const htmlPath = path.join(outputDir, this.getHtmlOutputPath(item.path));
+            await fs.mkdir(path.dirname(htmlPath), { recursive: true });
+            await this.writeHtmlFile(htmlPath, content);
+          }
           const sourcePath = fileService.getAbsolutePath(item.path);
           const targetPath = path.join(outputDir, item.path);
           await fs.mkdir(path.dirname(targetPath), { recursive: true });
@@ -160,6 +161,14 @@ export class StaticSiteBuilder {
     }
     const normalized = baseUrl.replace(/\/$/, '');
     return `${normalized}/assets`;
+  }
+
+  private getHtmlOutputPath(relativePath: string): string {
+    const normalized = relativePath.replace(/\\/g, '/');
+    if (normalized.toLowerCase().endsWith('.md')) {
+      return normalized.replace(/\.md$/i, '.html');
+    }
+    return `${normalized}.html`;
   }
 
   private resolveTemplateOptions(templateOptions?: TemplateOptions): TemplateRendererOptions {

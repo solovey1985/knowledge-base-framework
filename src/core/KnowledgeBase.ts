@@ -9,6 +9,11 @@ import { RenderedContent } from '../core/models';
 import { TemplateRenderer, TemplateRendererOptions } from '../services/TemplateRenderer';
 import { TemplateContextBuilder } from '../services/TemplateContextBuilder';
 
+const IMAGE_EXTENSIONS = new Set(['.png', '.jpg', '.jpeg', '.gif', '.webp', '.bmp', '.svg']);
+const TEXT_PREVIEW_EXTENSIONS = new Set([
+    '.txt', '.log', '.json', '.yml', '.yaml', '.xml', '.csv', '.env', '.js', '.ts', '.tsx', '.jsx', '.py', '.rb', '.java', '.cs', '.go', '.php', '.sh', '.html', '.css', '.scss', '.mdx'
+]);
+
 /**
  * Main Knowledge Base framework class
  */
@@ -218,43 +223,25 @@ export class KnowledgeBase {
                 }
             }
 
-            // Check if file exists
             if (!await this.fileService.exists(targetPath)) {
                 return null;
             }
 
-            // Read and render markdown
-            const markdownContent = await this.fileService.readFile(targetPath);
-            const rendered = await this.markdownRenderer.render(markdownContent);
+            const extension = path.extname(targetPath).toLowerCase();
 
-            // Generate navigation and breadcrumbs
-            const navigation = await this.navigationService.generateNavigation(
-                this.options.navigation!,
-                targetPath
-            );
+            if (extension === '.md') {
+                return await this.renderMarkdownFile(targetPath, isIndex);
+            }
 
-            const breadcrumbs = this.navigationService.generateBreadcrumb(targetPath);
+            if (this.isTextPreviewExtension(extension)) {
+                return await this.renderTextFile(targetPath);
+            }
 
-            // Get git information
-            const gitInfo = this.gitService.getCommitInfoForDisplay();
+            if (this.isImageExtension(extension)) {
+                return await this.renderImageFile(targetPath);
+            }
 
-            return {
-                htmlContent: rendered.html,
-                title: this.extractTitle(markdownContent) || this.options.title!,
-                description: this.options.description!,
-                navigation: this.navigationService.filterNavigation(
-                    navigation,
-                    this.options.navigation!.excludePatterns
-                ),
-                breadcrumbs,
-                tableOfContents: rendered.tableOfContents,
-                metadata: {
-                    path: targetPath,
-                    isIndex,
-                    gitInfo,
-                    lastModified: (await this.fileService.getStats(targetPath))?.lastModified
-                }
-            };
+            return null;
 
         } catch (error) {
             console.error('Error rendering content:', error);
@@ -267,63 +254,197 @@ export class KnowledgeBase {
      */
     private async renderDirectoryListing(dirPath: string): Promise<RenderedContent> {
         const items = await this.fileService.getDirectoryListing(dirPath);
+        const directories = items.filter(item => item.isDirectory).sort(this.sortByName);
+        const markdownFiles = items.filter(item => !item.isDirectory && item.extension === '.md').sort(this.sortByName);
+        const textFiles = items.filter(item => !item.isDirectory && this.isTextPreviewExtension(item.extension)).sort(this.sortByName);
+        const imageFiles = items.filter(item => !item.isDirectory && this.isImageExtension(item.extension)).sort(this.sortByName);
+        const otherFiles = items
+            .filter(item => !item.isDirectory && !markdownFiles.includes(item) && !textFiles.includes(item) && !imageFiles.includes(item))
+            .sort(this.sortByName);
 
-        let html = '<div class="directory-listing">';
-        html += '<h2>Directory Contents</h2>';
-        html += '<ul>';
+        const galleryId = `gallery-${(dirPath || 'root').replace(/[^a-z0-9-]/gi, '-')}`;
 
-        for (const item of items) {
-            const displayName = item.name;
-            const link = item.isDirectory
-                ? `/content/${item.path}/`
-                : `/content/${item.path}`;
-
-            html += `<li class="${item.isDirectory ? 'directory' : 'file'}">`;
-            html += `<a href="${link}">${displayName}</a>`;
-            if (!item.isDirectory) {
-                html += ` <small>(${item.size} bytes)</small>`;
-            }
-            html += '</li>';
-        }
-
-        html += '</ul></div>';
-
-        const navigation = await this.navigationService.generateNavigation(
-            this.options.navigation!,
-            dirPath
+        const htmlParts: string[] = [];
+        htmlParts.push('<section class="kb-dir" data-kb-directory>');
+        htmlParts.push(
+            `<header class="kb-dir__header"><div><p class="kb-dir__path">${this.escapeHtml(dirPath || '/')}</p><h1>Folder Contents</h1></div>` +
+            `<div class="kb-dir__meta">${items.length} item${items.length === 1 ? '' : 's'}</div></header>`
         );
 
-        const breadcrumbs = this.navigationService.generateBreadcrumb(dirPath);
+        const renderSection = (entries: typeof items, type: 'directories' | 'documents' | 'text' | 'images' | 'files', title: string) => {
+            if (entries.length === 0) return;
+            const galleryAttr = type === 'images' ? ` data-kb-lightbox-gallery="${galleryId}"` : '';
+            htmlParts.push(`<section class="kb-dir__section kb-dir__section--${type}">`);
+            htmlParts.push(`<h2>${title}</h2>`);
+            htmlParts.push(`<div class="kb-dir__grid"${galleryAttr}>`);
+
+            for (const entry of entries) {
+                const name = this.escapeHtml(entry.name);
+                if (type === 'images') {
+                    const imageUrl = this.buildRawContentUrl(entry.path);
+                    htmlParts.push(`
+                        <div class="kb-dir__entry kb-dir__entry--image">
+                            <button class="kb-dir__image-trigger" data-kb-lightbox-trigger data-image-src="${imageUrl}" data-image-name="${name}">
+                                <img src="${imageUrl}" alt="${name}" loading="lazy">
+                            </button>
+                            <div class="kb-dir__entry-meta">
+                                <span>${name}</span>
+                                <a href="${imageUrl}" target="_blank" rel="noopener">Open original</a>
+                            </div>
+                        </div>
+                    `);
+                } else {
+                    const meta = entry.isDirectory
+                        ? 'Folder'
+                        : `${entry.extension.toUpperCase().replace('.', '') || 'FILE'} • ${this.formatBytes(entry.size)}`;
+                    const href = entry.isDirectory
+                        ? this.buildFriendlyUrl(entry.path, 'directory')
+                        : type === 'documents'
+                            ? this.buildFriendlyUrl(entry.path, 'markdown')
+                            : type === 'text'
+                                ? this.buildFriendlyUrl(entry.path, 'text')
+                                : this.buildRawContentUrl(entry.path);
+
+                    const targetAttr = (!entry.isDirectory && type === 'files') ? ' target="_blank" rel="noopener"' : '';
+
+                    htmlParts.push(`
+                        <div class="kb-dir__entry">
+                            <a href="${href}"${targetAttr}>
+                                <span class="kb-dir__entry-name">${name}</span>
+                            </a>
+                            <span class="kb-dir__entry-meta">${meta}</span>
+                        </div>
+                    `);
+                }
+            }
+
+            htmlParts.push('</div></section>');
+        };
+
+        renderSection(directories, 'directories', 'Folders');
+        renderSection(markdownFiles, 'documents', 'Documents');
+        renderSection(textFiles, 'text', 'Text & Code');
+        renderSection(imageFiles, 'images', 'Images');
+        renderSection(otherFiles, 'files', 'Files');
+
+        if (items.length === 0) {
+            htmlParts.push('<p class="kb-dir__empty">This folder is empty.</p>');
+        }
+
+        htmlParts.push('</section>');
+
+        return this.composeContentResponse(
+            dirPath,
+            `Directory: ${dirPath || 'Root'}`,
+            htmlParts.join(''),
+            `Directory listing for ${dirPath || 'root directory'}`,
+            { isDirectory: true }
+        );
+    }
+
+    private async renderMarkdownFile(targetPath: string, isIndex: boolean): Promise<RenderedContent> {
+        const markdownContent = await this.fileService.readFile(targetPath);
+        const rendered = await this.markdownRenderer.render(markdownContent);
+        const navigation = await this.navigationService.generateNavigation(this.options.navigation!, targetPath);
+        const breadcrumbs = this.navigationService.generateBreadcrumb(targetPath);
+        const gitInfo = this.gitService.getCommitInfoForDisplay();
 
         return {
-            htmlContent: html,
-            title: `Directory: ${dirPath || 'Root'}`,
-            description: `Directory listing for ${dirPath || 'root directory'}`,
-            navigation: this.navigationService.filterNavigation(
-                navigation,
-                this.options.navigation!.excludePatterns
-            ),
+            htmlContent: rendered.html,
+            title: this.extractTitle(markdownContent) || this.options.title!,
+            description: this.options.description!,
+            navigation: this.navigationService.filterNavigation(navigation, this.options.navigation!.excludePatterns),
             breadcrumbs,
+            tableOfContents: rendered.tableOfContents,
             metadata: {
-                path: dirPath,
-                isDirectory: true
+                path: targetPath,
+                isIndex,
+                gitInfo,
+                lastModified: (await this.fileService.getStats(targetPath))?.lastModified
             }
         };
     }
 
-    /**
-     * Extract title from markdown content
-     */
+    private async renderTextFile(targetPath: string): Promise<RenderedContent> {
+        const rawContent = await this.fileService.readFile(targetPath);
+        const stats = await this.fileService.getStats(targetPath);
+        const extension = path.extname(targetPath).replace('.', '');
+        const displayName = path.basename(targetPath);
+        const downloadUrl = this.buildRawContentUrl(targetPath);
+        const escaped = this.escapeHtml(rawContent);
+        const html = `
+            <div class="kb-file">
+              <header class="kb-file__header">
+                <div>
+                  <p class="kb-file__path">${this.escapeHtml(targetPath)}</p>
+                  <h1>${this.escapeHtml(displayName)}</h1>
+                </div>
+                <div class="kb-file__meta">
+                  <span>${extension.toUpperCase()} • ${this.formatBytes(stats?.size || 0)}</span>
+                  ${stats?.lastModified ? `<span>Updated ${this.formatDate(stats.lastModified)}</span>` : ''}
+                  <a class="kb-file__download" href="${downloadUrl}" download>Download</a>
+                </div>
+              </header>
+              <pre class="kb-file__code"><code class="language-${this.escapeHtml(extension || 'text')}">${escaped}</code></pre>
+            </div>
+        `;
+
+        return this.composeContentResponse(targetPath, displayName, html, `${displayName} preview`);
+    }
+
+    private async renderImageFile(targetPath: string): Promise<RenderedContent> {
+        const stats = await this.fileService.getStats(targetPath);
+        const displayName = path.basename(targetPath);
+        const fileUrl = this.buildRawContentUrl(targetPath);
+        const html = `
+            <div class="kb-image-detail">
+              <div class="kb-image-detail__preview">
+                <img src="${fileUrl}" alt="${this.escapeHtml(displayName)}" loading="lazy" />
+              </div>
+              <div class="kb-image-detail__meta">
+                <h1>${this.escapeHtml(displayName)}</h1>
+                <dl>
+                  <div>
+                    <dt>Size</dt>
+                    <dd>${this.formatBytes(stats?.size || 0)}</dd>
+                  </div>
+                  ${stats?.lastModified ? `<div><dt>Updated</dt><dd>${this.formatDate(stats.lastModified)}</dd></div>` : ''}
+                </dl>
+                <a class="kb-file__download" href="${fileUrl}" target="_blank" rel="noopener">Open original</a>
+              </div>
+            </div>
+        `;
+
+        return this.composeContentResponse(targetPath, displayName, html, `${displayName} image`);
+    }
+
+    private async composeContentResponse(targetPath: string, title: string, html: string, description?: string, metadata: Record<string, unknown> = {}): Promise<RenderedContent> {
+        const navigation = await this.navigationService.generateNavigation(this.options.navigation!, targetPath);
+        const breadcrumbs = this.navigationService.generateBreadcrumb(targetPath);
+        const stats = await this.fileService.getStats(targetPath);
+
+        return {
+            htmlContent: html,
+            title,
+            description: description || this.options.description!,
+            navigation: this.navigationService.filterNavigation(navigation, this.options.navigation!.excludePatterns),
+            breadcrumbs,
+            metadata: {
+                path: targetPath,
+                lastModified: stats?.lastModified,
+                ...metadata
+            }
+        };
+    }
+
     private extractTitle(markdown: string): string | null {
         const lines = markdown.split('\n');
-
         for (const line of lines) {
             const trimmed = line.trim();
             if (trimmed.startsWith('# ')) {
                 return trimmed.substring(2).trim();
             }
         }
-
         return null;
     }
 
@@ -419,5 +540,65 @@ export class KnowledgeBase {
         } catch (error) {
             return null;
         }
+    }
+
+    private buildFriendlyUrl(relativePath: string, type: 'directory' | 'markdown' | 'text'): string {
+        const normalized = relativePath.replace(/\\/g, '/').replace(/^\/+/, '');
+        let href = '';
+        if (type === 'directory') {
+            href = `${normalized}/`.replace(/\/+/g, '/');
+        } else if (type === 'markdown') {
+            href = normalized.replace(/\.md$/i, '.html');
+        } else {
+            href = `${normalized}.html`;
+        }
+        href = href.startsWith('/') ? href : `/${href}`;
+        if (this.options.isStaticSite && this.options.baseUrl && this.options.baseUrl !== '/') {
+            return `${this.options.baseUrl.replace(/\/$/, '')}${href}`;
+        }
+        return href;
+    }
+
+    private buildRawContentUrl(relativePath: string): string {
+        const normalized = relativePath.replace(/\\/g, '/');
+        if (this.options.isStaticSite) {
+            const base = this.options.baseUrl || '';
+            const prefix = base && base !== '/' ? base.replace(/\/$/, '') : '';
+            return `${prefix}/${normalized}`.replace(/\/+/g, '/');
+        }
+        return `/content/${normalized}`;
+    }
+
+    private isTextPreviewExtension(extension: string): boolean {
+        return TEXT_PREVIEW_EXTENSIONS.has(extension.toLowerCase());
+    }
+
+    private isImageExtension(extension: string): boolean {
+        return IMAGE_EXTENSIONS.has(extension.toLowerCase());
+    }
+
+    private sortByName<T extends { name: string }>(a: T, b: T): number {
+        return a.name.localeCompare(b.name, undefined, { sensitivity: 'base' });
+    }
+
+    private formatBytes(bytes: number): string {
+        if (!bytes) return '0 B';
+        const units = ['B', 'KB', 'MB', 'GB'];
+        const exponent = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), units.length - 1);
+        const value = bytes / Math.pow(1024, exponent);
+        return `${value.toFixed(value < 10 ? 1 : 0)} ${units[exponent]}`;
+    }
+
+    private formatDate(date: Date): string {
+        return date.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
+    }
+
+    private escapeHtml(value: string): string {
+        return value
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#039;');
     }
 }

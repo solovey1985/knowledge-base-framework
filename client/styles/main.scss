@@ -25,6 +25,10 @@ body {
   min-height: 100vh;
 }
 
+body.kb-lightbox-open {
+  overflow: hidden;
+}
+
 a {
   color: inherit;
   text-decoration: none;
@@ -350,6 +354,240 @@ a {
 .kb-search-result span {
   font-size: 0.85rem;
   color: #5d5a78;
+}
+
+.kb-dir {
+  display: flex;
+  flex-direction: column;
+  gap: 2rem;
+}
+
+.kb-dir__header {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  align-items: flex-end;
+}
+
+.kb-dir__path {
+  font-size: 0.85rem;
+  color: var(--kb-muted);
+  margin: 0;
+}
+
+.kb-dir__meta {
+  font-size: 0.9rem;
+  color: var(--kb-muted);
+}
+
+.kb-dir__section h2 {
+  margin-bottom: 0.75rem;
+}
+
+.kb-dir__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 1rem;
+}
+
+.kb-dir__entry {
+  border: 1px solid var(--kb-border);
+  border-radius: 1rem;
+  padding: 1rem;
+  background: rgba(255, 255, 255, 0.9);
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.kb-dir__entry-name {
+  font-weight: 600;
+}
+
+.kb-dir__entry-meta {
+  font-size: 0.85rem;
+  color: var(--kb-muted);
+}
+
+.kb-dir__entry--image {
+  padding: 0.5rem;
+}
+
+.kb-dir__image-trigger {
+  border: none;
+  background: transparent;
+  padding: 0;
+  cursor: pointer;
+  display: block;
+}
+
+.kb-dir__image-trigger img {
+  width: 100%;
+  border-radius: 0.9rem;
+  max-height: 160px;
+  object-fit: cover;
+}
+
+.kb-dir__entry--image .kb-dir__entry-meta {
+  margin-top: 0.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.kb-dir__empty {
+  text-align: center;
+  color: var(--kb-muted);
+}
+
+.kb-file__header {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  align-items: flex-start;
+}
+
+.kb-file__path {
+  font-size: 0.85rem;
+  color: var(--kb-muted);
+  margin-bottom: 0.25rem;
+}
+
+.kb-file__meta {
+  display: flex;
+  gap: 1rem;
+  flex-wrap: wrap;
+  align-items: center;
+  font-size: 0.85rem;
+  color: var(--kb-muted);
+}
+
+.kb-file__download {
+  padding: 0.35rem 0.9rem;
+  border-radius: 999px;
+  border: 1px solid var(--kb-border);
+}
+
+.kb-file__code {
+  margin-top: 1.5rem;
+  background: #0d1117;
+  color: #f8fafc;
+  border-radius: 1rem;
+  padding: 1rem;
+  overflow-x: auto;
+}
+
+.kb-image-detail {
+  display: grid;
+  gap: 1.5rem;
+}
+
+.kb-image-detail__preview img {
+  max-width: 100%;
+  border-radius: 1rem;
+  box-shadow: 0 20px 40px -35px rgba(0, 0, 0, 0.7);
+}
+
+.kb-image-detail__meta dl {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 0.5rem;
+}
+
+.kb-image-detail__meta dt {
+  font-size: 0.85rem;
+  text-transform: uppercase;
+  color: var(--kb-muted);
+}
+
+.kb-image-detail__meta dd {
+  margin: 0;
+  font-weight: 600;
+}
+
+.kb-lightbox {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.8);
+  display: none;
+  align-items: center;
+  justify-content: center;
+  z-index: 50;
+}
+
+.kb-lightbox.is-visible {
+  display: flex;
+}
+
+.kb-lightbox__inner {
+  position: relative;
+  max-width: 90vw;
+  max-height: 90vh;
+}
+
+.kb-lightbox__inner img {
+  max-width: 100%;
+  max-height: 80vh;
+  border-radius: 1rem;
+  display: block;
+}
+
+.kb-lightbox.is-zoomed .kb-lightbox__inner img {
+  max-width: none;
+  max-height: none;
+}
+
+.kb-lightbox__caption {
+  margin-top: 0.5rem;
+  text-align: center;
+  color: #fff;
+}
+
+.kb-lightbox__close,
+.kb-lightbox__zoom {
+  position: absolute;
+  top: -10px;
+  border: none;
+  background: rgba(0, 0, 0, 0.75);
+  color: #fff;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  cursor: pointer;
+}
+
+.kb-lightbox__close {
+  right: -10px;
+}
+
+.kb-lightbox__zoom {
+  right: 30px;
+}
+
+.kb-lightbox__nav {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  border: none;
+  background: rgba(0, 0, 0, 0.6);
+  color: #fff;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  cursor: pointer;
+}
+
+.kb-lightbox__nav--prev {
+  left: -18px;
+}
+
+.kb-lightbox__nav--next {
+  right: -18px;
+}
+
+.kb-lightbox__nav[aria-disabled='true'] {
+  opacity: 0.4;
+  pointer-events: none;
 }
 
 .kb-search-trigger kbd {
