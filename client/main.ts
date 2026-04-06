@@ -1,6 +1,7 @@
 import './styles/main.scss';
 import { initNavigation } from './navigation';
 import { initSearch } from './search';
+import { initMermaid } from './mermaid';
 
 const DATA_BASE_ATTR = 'data-base-url';
 
@@ -25,4 +26,5 @@ ready(() => {
 
   initNavigation({ baseUrl });
   initSearch({ baseUrl });
+  initMermaid();
 });

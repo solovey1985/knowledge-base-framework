@@ -209,6 +209,28 @@ a {
   overflow-x: auto;
 }
 
+.mermaid {
+  background: #fff;
+  border: 1px solid var(--kb-border);
+  border-radius: 1rem;
+  padding: 1rem;
+  margin: 1.5rem 0;
+}
+
+.mermaid svg {
+  max-width: 100%;
+  height: auto;
+}
+
+.kb-mermaid-error {
+  background: #fee2e2;
+  color: #991b1b;
+  border: 1px solid #fecaca;
+  border-radius: 0.75rem;
+  padding: 0.75rem;
+  font-size: 0.9rem;
+}
+
 .kb-content table {
   width: 100%;
   border-collapse: collapse;
