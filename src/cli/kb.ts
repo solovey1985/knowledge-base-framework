@@ -1,3 +1,4 @@
+#!/usr/bin/env node
 import * as path from 'path';
 import * as fs from 'fs/promises';
 import express from 'express';
@@ -188,6 +189,12 @@ async function serveProject(args: string[]): Promise<void> {
         const { config } = await loadConfigFile();
 
         const app = express();
+        const projectAssetsDir = path.resolve('assets');
+        const frameworkAssetsDir = path.resolve(__dirname, '..', '..', 'templates', 'default', 'assets');
+
+        app.use('/assets', express.static(projectAssetsDir));
+        app.use('/assets', express.static(frameworkAssetsDir));
+
         const kb = new KnowledgeBase({ ...config, contentRootPath: path.resolve(config.contentRootPath) });
 
         kb.setupMiddleware(app);

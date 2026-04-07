@@ -11,7 +11,7 @@ import { TemplateContextBuilder } from '../services/TemplateContextBuilder';
 
 const IMAGE_EXTENSIONS = new Set(['.png', '.jpg', '.jpeg', '.gif', '.webp', '.bmp', '.svg']);
 const TEXT_PREVIEW_EXTENSIONS = new Set([
-    '.txt', '.log', '.json', '.yml', '.yaml', '.xml', '.csv', '.env', '.js', '.ts', '.tsx', '.jsx', '.py', '.rb', '.java', '.cs', '.go', '.php', '.sh', '.html', '.css', '.scss', '.mdx'
+    '.txt', '.log', '.json', '.yml', '.yaml', '.xml', '.csv', '.env', '.ini', '.toml', '.config', '.props', '.targets', '.sln', '.csproj', '.vbproj', '.fsproj', '.js', '.ts', '.tsx', '.jsx', '.py', '.rb', '.java', '.cs', '.go', '.php', '.sh', '.ps1', '.sql', '.html', '.css', '.scss', '.mdx'
 ]);
 
 /**
@@ -207,20 +207,12 @@ export class KnowledgeBase {
      */
     async renderContent(requestPath: string): Promise<RenderedContent | null> {
         try {
-            let targetPath = requestPath;
-            let isIndex = false;
+            const targetPath = requestPath;
 
-            // Handle root path or directory paths
+            // Directory routes always show listings. Index markdown remains available
+            // through its own document path, e.g. /folder/index.html.
             if (!targetPath || await this.fileService.isDirectory(targetPath)) {
-                // Look for index.md in the directory
-                const indexPath = targetPath ? path.posix.join(targetPath, 'index.md') : 'index.md';
-                if (await this.fileService.exists(indexPath)) {
-                    targetPath = indexPath;
-                    isIndex = true;
-                } else {
-                    // Generate directory listing
-                    return await this.renderDirectoryListing(targetPath);
-                }
+                return await this.renderDirectoryListing(targetPath);
             }
 
             if (!await this.fileService.exists(targetPath)) {
@@ -230,7 +222,7 @@ export class KnowledgeBase {
             const extension = path.extname(targetPath).toLowerCase();
 
             if (extension === '.md') {
-                return await this.renderMarkdownFile(targetPath, isIndex);
+                return await this.renderMarkdownFile(targetPath, false);
             }
 
             if (this.isTextPreviewExtension(extension)) {
