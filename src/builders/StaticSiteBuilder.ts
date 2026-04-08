@@ -1,31 +1,20 @@
 import * as fs from 'fs/promises';
 import * as path from 'path';
-import lunr from 'lunr';
 import { KnowledgeBase } from '../core/KnowledgeBase';
 import { KnowledgeBaseOptions, TemplateOptions } from '../core/interfaces';
 import { FileService } from '../services/FileService';
 import { TemplateRenderer, TemplateRendererOptions } from '../services/TemplateRenderer';
 import { TemplateContextBuilder } from '../services/TemplateContextBuilder';
-
-/**
- * Static site builder for knowledge base
- */
-interface SearchDocument {
-  id: string;
-  title: string;
-  body: string;
-  url: string;
-  snippet: string;
-}
+import { SearchIndexService } from '../services/SearchIndexService';
 
 export class StaticSiteBuilder {
   private knowledgeBase: KnowledgeBase;
   private options: KnowledgeBaseOptions;
   private templateRenderer: TemplateRenderer;
   private contextBuilder: TemplateContextBuilder;
+  private searchIndexService: SearchIndexService;
 
   constructor(options: KnowledgeBaseOptions) {
-    // Force static site mode
     this.options = {
       ...options,
       isStaticSite: true
@@ -33,34 +22,29 @@ export class StaticSiteBuilder {
     this.knowledgeBase = new KnowledgeBase(this.options);
     this.templateRenderer = new TemplateRenderer(this.resolveTemplateOptions(this.options.templates));
     this.contextBuilder = new TemplateContextBuilder(this.options, this.getStaticAssetsBase());
+    this.searchIndexService = new SearchIndexService(
+      this.knowledgeBase,
+      this.knowledgeBase.getFileService(),
+      this.options.search || {},
+      this.options.baseUrl || ''
+    );
   }
 
-  /**
-   * Build static site
-   */
   async build(): Promise<void> {
     console.log('🔨 Building static site...');
-    
+
     const outputDir = this.options.build?.outputDir || './docs';
-    
-    // Clean output directory if requested
+
     if (this.options.build?.clean !== false) {
       await this.cleanOutputDirectory(outputDir);
     }
 
-    // Create output directory
     await fs.mkdir(outputDir, { recursive: true });
 
-    // Build all pages
     await this.buildPages(outputDir);
-
-    // Copy assets
     await this.copyAssets(outputDir);
-
-    // Build search index
     await this.buildSearchIndex(outputDir);
 
-    // Generate additional files
     if (this.options.build?.generateSitemap) {
       await this.generateSitemap(outputDir);
     }
@@ -72,45 +56,36 @@ export class StaticSiteBuilder {
     console.log('✅ Static site build completed!');
   }
 
-  /**
-   * Clean output directory
-   */
   private async cleanOutputDirectory(outputDir: string): Promise<void> {
     try {
       console.log('🧹 Cleaning output directory...');
       await fs.rm(outputDir, { recursive: true, force: true });
-    } catch (error) {
+    } catch {
       // Directory might not exist, that's okay
     }
   }
 
-  /**
-   * Build all pages recursively
-   */
   private async buildPages(outputDir: string, currentPath: string = ''): Promise<void> {
     const fileService = this.knowledgeBase.getFileService();
-    
+
     try {
       const items = await fileService.getDirectoryListing(currentPath);
-      
+
       for (const item of items) {
         if (item.isDirectory) {
-          // Create directory in output
           const dirOutputPath = path.join(outputDir, item.path);
           await fs.mkdir(dirOutputPath, { recursive: true });
-          
-          // Recursively build subdirectory
+
           await this.buildPages(outputDir, item.path);
-          
-          // Check for index.md in directory
+
           const indexPath = path.posix.join(item.path, 'index.md');
           if (await fileService.exists(indexPath)) {
             const content = await this.knowledgeBase.renderContent(item.path);
             if (content) {
-          const htmlPath = path.join(outputDir, item.path, 'index.html');
-          await this.writeHtmlFile(htmlPath, content);
-        }
-      }
+              const htmlPath = path.join(outputDir, item.path, 'index.html');
+              await this.writeHtmlFile(htmlPath, content);
+            }
+          }
         } else if (item.extension === '.md') {
           const content = await this.knowledgeBase.renderContent(item.path);
           if (content) {
@@ -119,20 +94,13 @@ export class StaticSiteBuilder {
             await this.writeHtmlFile(htmlPath, content);
           }
         } else {
-          const content = await this.knowledgeBase.renderContent(item.path);
-          if (content) {
-            const htmlPath = path.join(outputDir, this.getHtmlOutputPath(item.path));
-            await fs.mkdir(path.dirname(htmlPath), { recursive: true });
-            await this.writeHtmlFile(htmlPath, content);
-          }
           const sourcePath = fileService.getAbsolutePath(item.path);
           const targetPath = path.join(outputDir, item.path);
           await fs.mkdir(path.dirname(targetPath), { recursive: true });
           await fs.copyFile(sourcePath, targetPath);
         }
       }
-      
-      // Handle root index
+
       if (currentPath === '') {
         const content = await this.knowledgeBase.renderContent('');
         if (content) {
@@ -140,17 +108,14 @@ export class StaticSiteBuilder {
           await this.writeHtmlFile(indexPath, content);
         }
       }
-      
+
     } catch (error) {
       console.error(`Error building pages for ${currentPath}:`, error);
     }
   }
 
-  /**
-   * Write HTML file with template
-   */
-  private async writeHtmlFile(filePath: string, content: any): Promise<void> {
-    const html = await this.templateRenderer.render(this.contextBuilder.build(content));
+  private async writeHtmlFile(filePath: string, content: unknown): Promise<void> {
+    const html = await this.templateRenderer.render(this.contextBuilder.build(content as Parameters<typeof this.contextBuilder.build>[0]));
     await fs.writeFile(filePath, html, 'utf-8');
   }
 
@@ -159,16 +124,7 @@ export class StaticSiteBuilder {
     if (!baseUrl || baseUrl === '/') {
       return '/assets';
     }
-    const normalized = baseUrl.replace(/\/$/, '');
-    return `${normalized}/assets`;
-  }
-
-  private getHtmlOutputPath(relativePath: string): string {
-    const normalized = relativePath.replace(/\\/g, '/');
-    if (normalized.toLowerCase().endsWith('.md')) {
-      return normalized.replace(/\.md$/i, '.html');
-    }
-    return `${normalized}.html`;
+    return `${baseUrl.replace(/\/$/, '')}/assets`;
   }
 
   private resolveTemplateOptions(templateOptions?: TemplateOptions): TemplateRendererOptions {
@@ -187,21 +143,17 @@ export class StaticSiteBuilder {
     };
   }
 
-  /**
-   * Copy assets to output directory
-   */
   private async copyAssets(outputDir: string): Promise<void> {
     console.log('📦 Copying framework assets...');
-    
+
     const frameworkRoot = path.resolve(__dirname, '../../');
     const templateAssetsDir = path.join(frameworkRoot, 'templates', 'default', 'assets');
     const outputAssetsDir = path.join(outputDir, 'assets');
-    
+
     try {
       await fs.mkdir(outputAssetsDir, { recursive: true });
       await this.copyDirectory(templateAssetsDir, outputAssetsDir);
 
-      // Ensure legacy consumers can still access core files from site root
       const criticalFiles = ['kb-app.css', 'kb-app.js'];
       for (const assetName of criticalFiles) {
         const sourcePath = path.join(templateAssetsDir, assetName);
@@ -212,152 +164,81 @@ export class StaticSiteBuilder {
       console.log('  ✓ Framework assets copied');
     } catch (error) {
       console.warn('⚠️ Could not copy bundled assets:', error instanceof Error ? error.message : 'Unknown error');
-      console.log('   Creating fallback basic styles...');
-      
-      // Fallback: create basic CSS if framework assets aren't available
-      const basicCss = `
-/* Basic Knowledge Base Styles - Fallback */
-body {
-  margin: 0;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-  line-height: 1.6;
-  color: #333;
-}
-
-#app {
-  display: flex;
-  min-height: 100vh;
-}
-
-.sidebar {
-  width: 300px;
-  background: #f8f9fa;
-  border-right: 1px solid #e9ecef;
-  overflow-y: auto;
-}
-
-.nav-header {
-  padding: 1rem;
-  border-bottom: 1px solid #e9ecef;
-}
-
-.main-content {
-  flex: 1;
-  padding: 2rem;
-  overflow-y: auto;
-}
-
-.content {
-  max-width: 800px;
-}
-`;
-      
-      await fs.mkdir(outputAssetsDir, { recursive: true });
-      await fs.writeFile(path.join(outputAssetsDir, 'kb-app.css'), basicCss, 'utf-8');
-      await fs.writeFile(path.join(outputDir, 'kb-app.css'), basicCss, 'utf-8');
+      await this.writeFallbackStyles(outputAssetsDir, outputDir);
     }
+  }
+
+  private async writeFallbackStyles(outputAssetsDir: string, outputDir: string): Promise<void> {
+    const basicCss = `body{margin:0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;line-height:1.6;color:#333}a{color:#007bff}.kb-shell{display:grid;grid-template-columns:300px 1fr;min-height:100vh}@media(max-width:768px){.kb-shell{grid-template-columns:1fr}}`;
+    await fs.mkdir(outputAssetsDir, { recursive: true });
+    await fs.writeFile(path.join(outputAssetsDir, 'kb-app.css'), basicCss, 'utf-8');
+    await fs.writeFile(path.join(outputDir, 'kb-app.css'), basicCss, 'utf-8');
+    console.log('  ✓ Fallback styles written');
   }
 
   private async buildSearchIndex(outputDir: string): Promise<void> {
-    if (this.options.search?.enabled === false) {
+    if (!this.searchIndexService.isEnabled()) {
       return;
     }
 
-    console.log('🔎 Generating search index...');
-    const documents = await this.collectSearchDocuments();
-    if (documents.length === 0) {
-      console.log('  ⚠️ No markdown documents found for search index.');
+    const indexFileName = this.searchIndexService.getIndexFileName();
+    const outputIndexPath = path.join(outputDir, indexFileName);
+
+    const needsRebuild = await this.needsSearchRebuild(outputDir, indexFileName);
+    if (!needsRebuild) {
+      console.log('🔎 Search index up to date, skipping rebuild.');
       return;
     }
 
-    const index = lunr(function () {
-      this.ref('id');
-      this.field('title');
-      this.field('body');
+    await this.searchIndexService.build();
 
-      documents.forEach(doc => this.add(doc));
-    });
-    const payload = {
-      index: index.toJSON(),
-      documents: documents.map(doc => ({
-        id: doc.id,
-        title: doc.title,
-        url: doc.url,
-        snippet: doc.snippet
-      }))
+    const payload = await this.searchIndexService.getIndexPayload();
+    if (!payload) {
+      console.log('  ⚠️ No documents indexed for search.');
+      return;
+    }
+
+    const outputPayload = {
+      index: payload.index,
+      documents: payload.documents
     };
-
-    const fileName = this.options.search?.indexFileName || 'search-index.json';
-    await fs.writeFile(
-      path.join(outputDir, fileName),
-      JSON.stringify(payload, null, 2),
-      'utf-8'
-    );
+    await fs.writeFile(outputIndexPath, JSON.stringify(outputPayload, null, 2), 'utf-8');
+    console.log(`  ✓ Search index written to ${indexFileName}`);
   }
 
-  private async collectSearchDocuments(): Promise<SearchDocument[]> {
-    const fileService = this.knowledgeBase.getFileService();
-    const markdownFiles = await this.collectMarkdownFiles(fileService);
-    const documents: SearchDocument[] = [];
-
-    for (const filePath of markdownFiles) {
-      const rendered = await this.knowledgeBase.renderContent(filePath);
-      if (!rendered || !rendered.htmlContent) {
-        continue;
-      }
-
-      const plainText = this.stripHtml(rendered.htmlContent);
-      if (!plainText) {
-        continue;
-      }
-
-      documents.push({
-        id: filePath,
-        title: rendered.title || this.options.title || filePath,
-        body: plainText,
-        url: this.getDocumentUrl(filePath),
-        snippet: plainText.slice(0, 280)
-      });
+  private async needsSearchRebuild(outputDir: string, indexFileName: string): Promise<boolean> {
+    const indexPath = path.join(outputDir, indexFileName);
+    try {
+      const indexStat = await fs.stat(indexPath);
+      const contentRoot = this.knowledgeBase.getFileService().getRootPath();
+      const latestContent = await this.findLatestContentMtime(contentRoot);
+      return latestContent > indexStat.mtime;
+    } catch {
+      return true;
     }
-
-    return documents;
   }
 
-  private async collectMarkdownFiles(fileService: FileService, currentPath = ''): Promise<string[]> {
-    const files: string[] = [];
+  private async findLatestContentMtime(dirPath: string): Promise<Date> {
+    let latest = new Date(0);
 
     try {
-      const entries = await fileService.getDirectoryListing(currentPath);
+      const entries = await fs.readdir(dirPath, { withFileTypes: true });
       for (const entry of entries) {
-        if (entry.isDirectory) {
-          const nested = await this.collectMarkdownFiles(fileService, entry.path);
-          files.push(...nested);
-        } else if (entry.extension === '.md') {
-          files.push(entry.path);
+        const fullPath = path.join(dirPath, entry.name);
+        if (entry.isDirectory()) {
+          if (entry.name === '.kb' || entry.name.startsWith('.')) continue;
+          const nested = await this.findLatestContentMtime(fullPath);
+          if (nested > latest) latest = nested;
+        } else if (entry.name.endsWith('.md')) {
+          const stat = await fs.stat(fullPath);
+          if (stat.mtime > latest) latest = stat.mtime;
         }
       }
-    } catch (error) {
-      console.warn('⚠️ Unable to inspect directory for search index:', error instanceof Error ? error.message : error);
+    } catch {
+      // ignore
     }
 
-    return files;
-  }
-
-  private stripHtml(value: string): string {
-    return value
-      .replace(/<[^>]+>/g, ' ')
-      .replace(/&nbsp;/g, ' ')
-      .replace(/\s+/g, ' ')
-      .trim();
-  }
-
-  private getDocumentUrl(markdownPath: string): string {
-    const normalized = markdownPath.replace(/\\/g, '/').replace(/\.md$/i, '.html');
-    const baseUrl = this.options.baseUrl || '';
-    if (!baseUrl || baseUrl === '/') {
-      return `/${normalized}`;
-    }
-    return `${baseUrl.replace(/\/$/, '')}/${normalized}`;
+    return latest;
   }
 
   private async copyDirectory(source: string, target: string): Promise<void> {
@@ -380,28 +261,80 @@ body {
     try {
       await fs.access(location);
       return true;
-    } catch (error) {
+    } catch {
       return false;
     }
   }
 
-  /**
-   * Generate sitemap.xml
-   */
   private async generateSitemap(outputDir: string): Promise<void> {
-    // Implementation would collect all pages and generate sitemap
-    console.log('Generating sitemap...');
+    console.log('🗺️ Generating sitemap...');
+
+    const fileService = this.knowledgeBase.getFileService();
+    const baseUrl = this.getSiteUrl();
+    const pages: { url: string; lastmod: string }[] = [];
+
+    await this.collectSitemapPages(fileService, '', pages);
+
+    const sitemap = `<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+${pages.map(p => `  <url><loc>${this.escapeXml(baseUrl + p.url)}</loc><lastmod>${p.lastmod}</lastmod></url>`).join('\n')}
+</urlset>`;
+
+    await fs.writeFile(path.join(outputDir, 'sitemap.xml'), sitemap, 'utf-8');
+    console.log(`  ✓ Sitemap written (${pages.length} pages)`);
   }
 
-  /**
-   * Generate robots.txt
-   */
+  private async collectSitemapPages(fileService: FileService, currentPath: string, pages: { url: string; lastmod: string }[]): Promise<void> {
+    try {
+      const entries = await fileService.getDirectoryListing(currentPath);
+
+      for (const entry of entries) {
+        if (entry.isDirectory) {
+          const indexMd = path.posix.join(entry.path, 'index.md');
+          if (await fileService.exists(indexMd)) {
+            const stat = await fileService.getStats(indexMd);
+            const url = entry.path === '' ? '/' : `/${entry.path}/`;
+            pages.push({ url, lastmod: stat?.lastModified?.toISOString().split('T')[0] || '' });
+          }
+          await this.collectSitemapPages(fileService, entry.path, pages);
+        } else if (entry.extension === '.md' && entry.name !== 'index.md') {
+          const stat = await fileService.getStats(entry.path);
+          const url = `/${entry.path.replace(/\.md$/i, '.html')}`;
+          pages.push({ url, lastmod: stat?.lastModified?.toISOString().split('T')[0] || '' });
+        }
+      }
+    } catch {
+      // ignore inaccessible directories
+    }
+  }
+
+  private getSiteUrl(): string {
+    const base = this.options.baseUrl || '';
+    if (base && base !== '/' && (base.startsWith('http://') || base.startsWith('https://'))) {
+      return base.replace(/\/$/, '');
+    }
+    const host = this.options.server?.host || 'localhost';
+    const port = this.options.server?.port || 3000;
+    return `http://${host}:${port}`;
+  }
+
+  private escapeXml(str: string): string {
+    return str
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&apos;');
+  }
+
   private async generateRobots(outputDir: string): Promise<void> {
+    const siteUrl = this.getSiteUrl();
     const robots = `User-agent: *
 Allow: /
 
-Sitemap: ${this.options.baseUrl}/sitemap.xml`;
-    
-    await fs.writeFile(path.join(outputDir, 'robots.txt'), robots);
+Sitemap: ${siteUrl}/sitemap.xml`;
+
+    await fs.writeFile(path.join(outputDir, 'robots.txt'), robots, 'utf-8');
+    console.log('  ✓ robots.txt written');
   }
 }

@@ -146,7 +146,11 @@ export class TemplateContextBuilder {
   }
 
   private replaceMarkdownExtension(value: string): string {
-    return value.endsWith('.md') ? `${value.slice(0, -3)}.html` : value;
+    if (!value.endsWith('.md')) {
+      return value;
+    }
+
+    return this.options.isStaticSite ? `${value.slice(0, -3)}.html` : value;
   }
 
   private isHttpUrl(value: string): boolean {

@@ -1,5 +1,7 @@
 import { Express, Request, Response, NextFunction } from 'express';
 import * as path from 'path';
+import crypto from 'crypto';
+import express from 'express';
 import { KnowledgeBaseOptions, TemplateOptions } from '../core/interfaces';
 import { FileService } from '../services/FileService';
 import { NavigationService } from '../services/NavigationService';
@@ -8,6 +10,7 @@ import { GitService } from '../services/GitService';
 import { RenderedContent } from '../core/models';
 import { TemplateRenderer, TemplateRendererOptions } from '../services/TemplateRenderer';
 import { TemplateContextBuilder } from '../services/TemplateContextBuilder';
+import { SearchIndexService } from '../services/SearchIndexService';
 
 const IMAGE_EXTENSIONS = new Set(['.png', '.jpg', '.jpeg', '.gif', '.webp', '.bmp', '.svg']);
 const TEXT_PREVIEW_EXTENSIONS = new Set([
@@ -25,6 +28,7 @@ export class KnowledgeBase {
     private gitService: GitService;
     private templateRenderer: TemplateRenderer;
     private templateContextBuilder: TemplateContextBuilder;
+    private searchIndexService: SearchIndexService;
 
     constructor(options: KnowledgeBaseOptions) {
         this.options = this.mergeWithDefaults(options);
@@ -38,6 +42,7 @@ export class KnowledgeBase {
         const assetsOverride = this.options.isStaticSite ? undefined : (this.options.templates?.assetsBasePath || '/assets');
         this.templateRenderer = new TemplateRenderer(this.resolveTemplateOptions(this.options.templates));
         this.templateContextBuilder = new TemplateContextBuilder(this.options, assetsOverride);
+        this.searchIndexService = new SearchIndexService(this, this.fileService, this.options.search || {}, this.options.baseUrl || '');
     }
 
     /**
@@ -86,7 +91,21 @@ export class KnowledgeBase {
             },
             search: {
                 enabled: options.search?.enabled !== false,
-                indexFileName: options.search?.indexFileName || 'search-index.json'
+                indexFileName: options.search?.indexFileName || 'search-index.json',
+                indexFilePath: options.search?.indexFilePath,
+                indexUrlPath: options.search?.indexUrlPath,
+                titleBoost: options.search?.titleBoost,
+                bodyBoost: options.search?.bodyBoost
+            },
+            auth: {
+                enabled: options.auth?.enabled || false,
+                username: options.auth?.username || '',
+                password: options.auth?.password || '',
+                cookieName: options.auth?.cookieName || 'kb_auth',
+                cookieSecret: options.auth?.cookieSecret || '',
+                loginPath: options.auth?.loginPath || '/login',
+                logoutPath: options.auth?.logoutPath || '/logout',
+                ...options.auth
             }
         };
     }
@@ -95,6 +114,8 @@ export class KnowledgeBase {
      * Setup Express middleware for serving content
      */
     setupMiddleware(app: Express): void {
+        app.use(express.urlencoded({ extended: false }));
+
         // Unicode path normalization middleware
         const normalizeUnicodePath = (req: Request, res: Response, next: NextFunction) => {
             if (req.params && req.params[0]) {
@@ -110,6 +131,56 @@ export class KnowledgeBase {
             }
             next();
         };
+
+        const auth = this.options.auth;
+        if (auth?.enabled) {
+            app.get(auth.loginPath || '/login', (req: Request, res: Response) => {
+                const redirect = this.normalizeRedirectTarget(String(req.query.redirect || req.query.next || '/'));
+                res.status(200).send(this.renderLoginPage(redirect));
+            });
+
+            app.post(auth.loginPath || '/login', (req: Request, res: Response) => {
+                const username = String(req.body?.username || '').trim();
+                const password = String(req.body?.password || '');
+                const redirect = this.normalizeRedirectTarget(String(req.body?.redirect || '/'));
+
+                if (this.verifyCredentials(username, password)) {
+                    const token = this.createAuthToken(username);
+                    const cookieName = auth.cookieName || 'kb_auth';
+                    const cookieValue = `${cookieName}=${token}; Path=/; HttpOnly; SameSite=Lax${this.isSecureRequest(req) ? '; Secure' : ''}`;
+                    res.setHeader('Set-Cookie', cookieValue);
+                    res.redirect(302, redirect);
+                    return;
+                }
+
+                res.status(401).send(this.renderLoginPage(redirect, 'Invalid username or password.'));
+            });
+
+            app.post(auth.logoutPath || '/logout', (_req: Request, res: Response) => {
+                const cookieName = auth.cookieName || 'kb_auth';
+                res.setHeader('Set-Cookie', `${cookieName}=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0`);
+                res.redirect(302, auth.loginPath || '/login');
+            });
+
+            app.use((req: Request, res: Response, next: NextFunction) => {
+                const pathname = req.path || '';
+                if (pathname.startsWith('/assets') || pathname === auth.loginPath || pathname === auth.logoutPath) {
+                    return next();
+                }
+
+                if (this.isAuthenticated(req)) {
+                    return next();
+                }
+
+                if (req.method === 'GET' || req.method === 'HEAD') {
+                    const redirect = this.normalizeRedirectTarget(String(req.originalUrl || req.url || '/'));
+                    res.status(200).send(this.renderLoginPage(redirect));
+                    return;
+                }
+
+                res.status(401).send(this.renderLoginPage('/'));
+            });
+        }
 
         // Content routing middleware
         app.get('/content/*', normalizeUnicodePath, async (req: Request, res: Response, next: NextFunction) => {
@@ -138,6 +209,9 @@ export class KnowledgeBase {
         app.get('/', async (req: Request, res: Response) => {
             await this.handleIndexRequest(req, res);
         });
+
+        // Search index endpoint
+        this.setupSearchEndpoint(app);
 
         // Friendly HTML routes
         app.get('*', async (req: Request, res: Response, next: NextFunction) => {
@@ -257,31 +331,31 @@ export class KnowledgeBase {
         const galleryId = `gallery-${(dirPath || 'root').replace(/[^a-z0-9-]/gi, '-')}`;
 
         const htmlParts: string[] = [];
-        htmlParts.push('<section class="kb-dir" data-kb-directory>');
+        htmlParts.push('<section class="kb-dir space-y-8" data-kb-directory>');
         htmlParts.push(
-            `<header class="kb-dir__header"><div><p class="kb-dir__path">${this.escapeHtml(dirPath || '/')}</p><h1>Folder Contents</h1></div>` +
-            `<div class="kb-dir__meta">${items.length} item${items.length === 1 ? '' : 's'}</div></header>`
+            `<header class="kb-dir__header flex flex-wrap items-end justify-between gap-4 rounded-3xl border border-slate-200 bg-slate-50 p-5"><div><p class="kb-dir__path text-xs uppercase tracking-[0.3em] text-sky-700">${this.escapeHtml(dirPath || '/')}</p><h1 class="mt-2 text-3xl font-semibold tracking-tight text-slate-900">Folder Contents</h1></div>` +
+            `<div class="kb-dir__meta rounded-full border border-slate-200 bg-white px-4 py-2 text-sm text-slate-500">${items.length} item${items.length === 1 ? '' : 's'}</div></header>`
         );
 
         const renderSection = (entries: typeof items, type: 'directories' | 'documents' | 'text' | 'images' | 'files', title: string) => {
             if (entries.length === 0) return;
             const galleryAttr = type === 'images' ? ` data-kb-lightbox-gallery="${galleryId}"` : '';
-            htmlParts.push(`<section class="kb-dir__section kb-dir__section--${type}">`);
-            htmlParts.push(`<h2>${title}</h2>`);
-            htmlParts.push(`<div class="kb-dir__grid"${galleryAttr}>`);
+            htmlParts.push(`<section class="kb-dir__section kb-dir__section--${type} space-y-4">`);
+            htmlParts.push(`<h2 class="text-lg font-semibold tracking-tight text-slate-900">${title}</h2>`);
+            htmlParts.push(`<div class="kb-dir__grid grid gap-3 sm:grid-cols-2 xl:grid-cols-3"${galleryAttr}>`);
 
             for (const entry of entries) {
                 const name = this.escapeHtml(entry.name);
                 if (type === 'images') {
                     const imageUrl = this.buildRawContentUrl(entry.path);
                     htmlParts.push(`
-                        <div class="kb-dir__entry kb-dir__entry--image">
-                            <button class="kb-dir__image-trigger" data-kb-lightbox-trigger data-image-src="${imageUrl}" data-image-name="${name}">
-                                <img src="${imageUrl}" alt="${name}" loading="lazy">
+                        <div class="kb-dir__entry kb-dir__entry--image overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-lg shadow-slate-200/50">
+                            <button class="kb-dir__image-trigger block w-full" data-kb-lightbox-trigger data-image-src="${imageUrl}" data-image-name="${name}">
+                                <img class="h-56 w-full object-cover" src="${imageUrl}" alt="${name}" loading="lazy">
                             </button>
-                            <div class="kb-dir__entry-meta">
-                                <span>${name}</span>
-                                <a href="${imageUrl}" target="_blank" rel="noopener">Open original</a>
+                            <div class="kb-dir__entry-meta flex items-center justify-between gap-4 px-4 py-3 text-sm text-slate-600">
+                                <span class="truncate">${name}</span>
+                                <a class="text-sky-700 hover:text-sky-800" href="${imageUrl}" target="_blank" rel="noopener">Open original</a>
                             </div>
                         </div>
                     `);
@@ -300,11 +374,11 @@ export class KnowledgeBase {
                     const targetAttr = (!entry.isDirectory && type === 'files') ? ' target="_blank" rel="noopener"' : '';
 
                     htmlParts.push(`
-                        <div class="kb-dir__entry">
-                            <a href="${href}"${targetAttr}>
-                                <span class="kb-dir__entry-name">${name}</span>
+                        <div class="kb-dir__entry rounded-3xl border border-slate-200 bg-white p-4 shadow-lg shadow-slate-200/50 transition hover:border-sky-300 hover:bg-slate-50">
+                            <a class="block" href="${href}"${targetAttr}>
+                                <span class="kb-dir__entry-name block font-medium text-slate-900">${name}</span>
                             </a>
-                            <span class="kb-dir__entry-meta">${meta}</span>
+                            <span class="kb-dir__entry-meta mt-2 block text-sm text-slate-500">${meta}</span>
                         </div>
                     `);
                 }
@@ -320,7 +394,7 @@ export class KnowledgeBase {
         renderSection(otherFiles, 'files', 'Files');
 
         if (items.length === 0) {
-            htmlParts.push('<p class="kb-dir__empty">This folder is empty.</p>');
+            htmlParts.push('<p class="kb-dir__empty rounded-3xl border border-dashed border-slate-200 bg-white px-6 py-10 text-center text-slate-500">This folder is empty.</p>');
         }
 
         htmlParts.push('</section>');
@@ -336,7 +410,7 @@ export class KnowledgeBase {
 
     private async renderMarkdownFile(targetPath: string, isIndex: boolean): Promise<RenderedContent> {
         const markdownContent = await this.fileService.readFile(targetPath);
-        const rendered = await this.markdownRenderer.render(markdownContent);
+        const rendered = await this.markdownRenderer.render(markdownContent, targetPath);
         const navigation = await this.navigationService.generateNavigation(this.options.navigation!, targetPath);
         const breadcrumbs = this.navigationService.generateBreadcrumb(targetPath);
         const gitInfo = this.gitService.getCommitInfoForDisplay();
@@ -365,19 +439,19 @@ export class KnowledgeBase {
         const downloadUrl = this.buildRawContentUrl(targetPath);
         const escaped = this.escapeHtml(rawContent);
         const html = `
-            <div class="kb-file">
-              <header class="kb-file__header">
+            <div class="kb-file space-y-6 rounded-3xl border border-slate-200 bg-white p-6 shadow-xl shadow-slate-200/50">
+              <header class="kb-file__header flex flex-wrap items-end justify-between gap-4 border-b border-slate-200 pb-5">
                 <div>
-                  <p class="kb-file__path">${this.escapeHtml(targetPath)}</p>
-                  <h1>${this.escapeHtml(displayName)}</h1>
+                  <p class="kb-file__path text-xs uppercase tracking-[0.3em] text-sky-700">${this.escapeHtml(targetPath)}</p>
+                  <h1 class="mt-2 text-3xl font-semibold tracking-tight text-slate-900">${this.escapeHtml(displayName)}</h1>
                 </div>
-                <div class="kb-file__meta">
-                  <span>${extension.toUpperCase()} • ${this.formatBytes(stats?.size || 0)}</span>
-                  ${stats?.lastModified ? `<span>Updated ${this.formatDate(stats.lastModified)}</span>` : ''}
-                  <a class="kb-file__download" href="${downloadUrl}" download>Download</a>
+                <div class="kb-file__meta flex flex-wrap items-center gap-3 text-sm text-slate-600">
+                  <span class="rounded-full border border-slate-200 bg-slate-50 px-3 py-1">${extension.toUpperCase()} • ${this.formatBytes(stats?.size || 0)}</span>
+                  ${stats?.lastModified ? `<span class="rounded-full border border-slate-200 bg-slate-50 px-3 py-1">Updated ${this.formatDate(stats.lastModified)}</span>` : ''}
+                  <a class="kb-file__download rounded-full bg-sky-500 px-4 py-2 font-semibold text-white transition hover:bg-sky-600" href="${downloadUrl}" download>Download</a>
                 </div>
               </header>
-              <pre class="kb-file__code"><code class="language-${this.escapeHtml(extension || 'text')}">${escaped}</code></pre>
+              <pre class="kb-file__code overflow-x-auto rounded-2xl border border-slate-200 bg-slate-950 p-5 text-sm text-slate-100"><code class="language-${this.escapeHtml(extension || 'text')}">${escaped}</code></pre>
             </div>
         `;
 
@@ -389,20 +463,20 @@ export class KnowledgeBase {
         const displayName = path.basename(targetPath);
         const fileUrl = this.buildRawContentUrl(targetPath);
         const html = `
-            <div class="kb-image-detail">
-              <div class="kb-image-detail__preview">
-                <img src="${fileUrl}" alt="${this.escapeHtml(displayName)}" loading="lazy" />
+            <div class="kb-image-detail grid gap-6 rounded-3xl border border-slate-200 bg-white p-6 shadow-xl shadow-slate-200/50 lg:grid-cols-[minmax(0,1fr)_20rem]">
+              <div class="kb-image-detail__preview overflow-hidden rounded-3xl border border-slate-200 bg-slate-50 p-3">
+                <img class="h-auto w-full rounded-2xl object-contain" src="${fileUrl}" alt="${this.escapeHtml(displayName)}" loading="lazy" />
               </div>
-              <div class="kb-image-detail__meta">
-                <h1>${this.escapeHtml(displayName)}</h1>
-                <dl>
-                  <div>
-                    <dt>Size</dt>
+              <div class="kb-image-detail__meta space-y-4 rounded-3xl border border-slate-200 bg-slate-50 p-5">
+                <h1 class="text-3xl font-semibold tracking-tight text-slate-900">${this.escapeHtml(displayName)}</h1>
+                <dl class="space-y-3 text-sm text-slate-600">
+                  <div class="flex items-center justify-between gap-4 rounded-2xl border border-slate-200 bg-white px-4 py-3">
+                    <dt class="text-slate-500">Size</dt>
                     <dd>${this.formatBytes(stats?.size || 0)}</dd>
                   </div>
-                  ${stats?.lastModified ? `<div><dt>Updated</dt><dd>${this.formatDate(stats.lastModified)}</dd></div>` : ''}
+                  ${stats?.lastModified ? `<div class="flex items-center justify-between gap-4 rounded-2xl border border-slate-200 bg-white px-4 py-3"><dt class="text-slate-500">Updated</dt><dd>${this.formatDate(stats.lastModified)}</dd></div>` : ''}
                 </dl>
-                <a class="kb-file__download" href="${fileUrl}" target="_blank" rel="noopener">Open original</a>
+                <a class="kb-file__download inline-flex rounded-full bg-sky-500 px-4 py-2 font-semibold text-white transition hover:bg-sky-600" href="${fileUrl}" target="_blank" rel="noopener">Open original</a>
               </div>
             </div>
         `;
@@ -540,7 +614,7 @@ export class KnowledgeBase {
         if (type === 'directory') {
             href = `${normalized}/`.replace(/\/+/g, '/');
         } else if (type === 'markdown') {
-            href = normalized.replace(/\.md$/i, '.html');
+            href = this.options.isStaticSite ? normalized.replace(/\.md$/i, '.html') : normalized;
         } else {
             href = `${normalized}.html`;
         }
@@ -592,5 +666,198 @@ export class KnowledgeBase {
             .replace(/>/g, '&gt;')
             .replace(/"/g, '&quot;')
             .replace(/'/g, '&#039;');
+    }
+
+    private verifyCredentials(username: string, password: string): boolean {
+        const auth = this.options.auth;
+        if (!auth?.enabled) {
+            return true;
+        }
+
+        if (!auth.username || !auth.password) {
+            return false;
+        }
+
+        return this.secureEquals(username, auth.username) && this.secureEquals(password, auth.password);
+    }
+
+    private createAuthToken(username: string): string {
+        const auth = this.options.auth;
+        const secret = auth?.cookieSecret || `${auth?.username || ''}:${auth?.password || ''}`;
+        const payload = Buffer.from(username, 'utf8').toString('base64url');
+        const signature = crypto.createHmac('sha256', secret).update(payload).digest('base64url');
+        return `${payload}.${signature}`;
+    }
+
+    private isAuthenticated(req: Request): boolean {
+        const auth = this.options.auth;
+        if (!auth?.enabled) {
+            return true;
+        }
+
+        const cookieName = auth.cookieName || 'kb_auth';
+        const token = this.getCookieValue(req, cookieName);
+        if (!token) {
+            return false;
+        }
+
+        const secret = auth.cookieSecret || `${auth.username || ''}:${auth.password || ''}`;
+        const [payload, signature] = token.split('.');
+        if (!payload || !signature) {
+            return false;
+        }
+
+        const expected = crypto.createHmac('sha256', secret).update(payload).digest('base64url');
+        if (!this.secureEquals(signature, expected)) {
+            return false;
+        }
+
+        try {
+            const username = Buffer.from(payload, 'base64url').toString('utf8');
+            return auth.username ? this.secureEquals(username, auth.username) : true;
+        } catch {
+            return false;
+        }
+    }
+
+    private renderLoginPage(redirectTo: string, errorMessage?: string): string {
+        const auth = this.options.auth;
+        const title = this.escapeHtml(this.options.title || 'Knowledge Base');
+        const loginPath = this.escapeHtml(auth?.loginPath || '/login');
+        const logoutPath = this.escapeHtml(auth?.logoutPath || '/logout');
+        const safeRedirect = this.escapeHtml(redirectTo || '/');
+        const errorHtml = errorMessage
+            ? `<div class="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">${this.escapeHtml(errorMessage)}</div>`
+            : '';
+
+        return `<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Sign in • ${title}</title>
+  <script>
+    window.tailwind = window.tailwind || {};
+    window.tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['Inter', 'ui-sans-serif', 'system-ui']
+          }
+        }
+      }
+    }
+  </script>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="min-h-screen bg-slate-50 text-slate-900">
+  <main class="flex min-h-screen items-center justify-center p-6">
+    <section class="w-full max-w-md rounded-3xl border border-slate-200 bg-white p-8 shadow-2xl shadow-slate-200/60 backdrop-blur">
+      <div class="mb-8">
+        <p class="text-sm uppercase tracking-[0.3em] text-sky-700">Private access</p>
+        <h1 class="mt-3 text-3xl font-semibold tracking-tight text-slate-900">${title}</h1>
+        <p class="mt-3 text-sm leading-6 text-slate-500">Sign in to continue.</p>
+      </div>
+      ${errorHtml}
+      <form method="post" action="${loginPath}" class="mt-6 space-y-4">
+        <input type="hidden" name="redirect" value="${safeRedirect}">
+        <div>
+          <label class="mb-2 block text-sm font-medium text-slate-700" for="username">Username</label>
+          <input id="username" name="username" autocomplete="username" required class="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-slate-900 outline-none ring-0 placeholder:text-slate-400 focus:border-sky-500 focus:bg-white" placeholder="Username">
+        </div>
+        <div>
+          <label class="mb-2 block text-sm font-medium text-slate-700" for="password">Password</label>
+          <input id="password" name="password" type="password" autocomplete="current-password" required class="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-slate-900 outline-none ring-0 placeholder:text-slate-400 focus:border-sky-500 focus:bg-white" placeholder="Password">
+        </div>
+        <button type="submit" class="w-full rounded-2xl bg-sky-500 px-4 py-3 font-semibold text-white transition hover:bg-sky-600">Sign in</button>
+      </form>
+      <form method="post" action="${logoutPath}" class="mt-4 text-center text-xs text-slate-500">
+        <button type="submit" class="underline decoration-slate-300 underline-offset-4">Logout</button>
+      </form>
+    </section>
+  </main>
+</body>
+</html>`;
+    }
+
+    private normalizeRedirectTarget(value: string): string {
+        if (!value) {
+            return '/';
+        }
+
+        const cleaned = value.startsWith('/') ? value : `/${value}`;
+        return cleaned.replace(/\s+/g, '');
+    }
+
+    private getCookieValue(req: Request, name: string): string | null {
+        const header = req.headers.cookie;
+        if (!header) {
+            return null;
+        }
+
+        const parts = header.split(';');
+        for (const part of parts) {
+            const [key, ...rest] = part.trim().split('=');
+            if (key === name) {
+                return rest.join('=');
+            }
+        }
+
+        return null;
+    }
+
+    private secureEquals(left: string, right: string): boolean {
+        const leftBuffer = Buffer.from(left, 'utf8');
+        const rightBuffer = Buffer.from(right, 'utf8');
+        if (leftBuffer.length !== rightBuffer.length) {
+            return false;
+        }
+
+        return crypto.timingSafeEqual(leftBuffer, rightBuffer);
+    }
+
+    private isSecureRequest(req: Request): boolean {
+        if (req.secure) {
+            return true;
+        }
+
+        const forwardedProto = req.headers['x-forwarded-proto'];
+        if (typeof forwardedProto === 'string') {
+            return forwardedProto.split(',')[0].trim() === 'https';
+        }
+
+        return false;
+    }
+
+    private setupSearchEndpoint(app: Express): void {
+        if (!this.searchIndexService.isEnabled()) {
+            return;
+        }
+
+        const indexFileName = this.searchIndexService.getIndexFileName();
+
+        app.get(`/${indexFileName}`, async (req: Request, res: Response) => {
+            try {
+                const payload = await this.searchIndexService.buildAndGetIndex();
+                if (!payload) {
+                    res.status(404).json({ error: 'Search index not found. Run "kb build" first or add content files.' });
+                    return;
+                }
+                res.setHeader('Content-Type', 'application/json');
+                res.setHeader('Cache-Control', 'public, max-age=60');
+                res.json(payload);
+            } catch (error) {
+                console.error('Error serving search index:', error);
+                res.status(500).json({ error: 'Failed to build search index' });
+            }
+        });
+    }
+
+    getSearchIndexService(): SearchIndexService {
+        return this.searchIndexService;
+    }
+
+    getTitle(): string {
+        return this.options.title || 'Knowledge Base';
     }
 }

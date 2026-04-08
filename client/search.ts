@@ -24,9 +24,13 @@ interface SearchModal {
   onClose(handler: () => void): void;
   renderResults(documents: SearchDocument[]): void;
   setReady(): void;
-  setError(message: string): void;
+  setLoading(): void;
+  setError(message: string, retryable?: boolean): void;
   clearResults(): void;
 }
+
+const FETCH_TIMEOUT_MS = 8000;
+const MAX_RETRIES = 2;
 
 export function initSearch({ baseUrl = '' }: SearchInitOptions): void {
   const trigger = document.querySelector<HTMLElement>('[data-kb-search-trigger]');
@@ -41,28 +45,54 @@ export function initSearch({ baseUrl = '' }: SearchInitOptions): void {
   let index: lunr.Index | null = null;
   let documents: SearchDocument[] = [];
   let loading = false;
+  let retryCount = 0;
+  let retryTimeout: ReturnType<typeof setTimeout> | null = null;
+
+  const loadIndex = (attempt = 0) => {
+    loading = true;
+    modal.setLoading();
+
+    fetchIndex(baseUrl, indexName)
+      .then(payload => {
+        index = lunr.Index.load(payload.index);
+        documents = payload.documents;
+        retryCount = 0;
+        modal.setReady();
+      })
+      .catch(error => {
+        retryCount++;
+        const isNetworkError = error.message.includes('fetch') || error.message.includes('network') || error.message.includes('timeout');
+        const canRetry = attempt < MAX_RETRIES && isNetworkError;
+
+        if (canRetry) {
+          const delay = Math.min(1000 * Math.pow(2, attempt), 5000);
+          modal.setError(`Retrying… (${attempt + 1}/${MAX_RETRIES})`, false);
+          retryTimeout = setTimeout(() => loadIndex(attempt + 1), delay);
+        } else {
+          const message = formatErrorMessage(error, attempt);
+          modal.setError(message, attempt < MAX_RETRIES);
+        }
+      })
+      .finally(() => {
+        loading = false;
+      });
+  };
 
   const openModal = () => {
     modal.open();
     if (!index && !loading) {
-      loading = true;
-      fetchIndex(baseUrl, indexName)
-        .then(payload => {
-          index = lunr.Index.load(payload.index);
-          documents = payload.documents;
-          modal.setReady();
-        })
-        .catch(error => {
-          const message = error instanceof Error ? error.message : 'Unable to load search index';
-          modal.setError(message);
-        })
-        .finally(() => {
-          loading = false;
-        });
+      retryCount = 0;
+      loadIndex();
     }
   };
 
-  const closeModal = () => modal.close();
+  const closeModal = () => {
+    modal.close();
+    if (retryTimeout) {
+      clearTimeout(retryTimeout);
+      retryTimeout = null;
+    }
+  };
 
   trigger.addEventListener('click', event => {
     event.preventDefault();
@@ -103,25 +133,79 @@ export function initSearch({ baseUrl = '' }: SearchInitOptions): void {
     }
 
     try {
-      const results = index.search(`${normalized}*`);
-      const mapped = results
-        .map(result => documents.find(doc => doc.id === result.ref))
-        .filter((doc): doc is SearchDocument => Boolean(doc));
-      modal.renderResults(mapped);
-    } catch (error) {
+      const results = executeSearch(index, documents, normalized);
+      modal.renderResults(results);
+    } catch {
       modal.renderResults([]);
     }
   });
 }
 
-function fetchIndex(baseUrl: string, indexName: string): Promise<SearchPayload> {
-  const requestUrl = joinUrl(baseUrl, indexName);
-  return fetch(requestUrl).then(response => {
-    if (!response.ok) {
-      throw new Error(`Search index request failed (${response.status})`);
+function executeSearch(index: lunr.Index, documents: SearchDocument[], query: string): SearchDocument[] {
+  const strategies = [
+    () => index.search(`${query}`),
+    () => index.search(`${query}*`),
+    () => {
+      const words = query.split(/\s+/);
+      return words.flatMap(word => index.search(`${word}*`));
     }
+  ];
+
+  for (const strategy of strategies) {
+    try {
+      const results = strategy();
+      if (results.length > 0) {
+        const seen = new Set<string>();
+        const unique = results.filter(r => {
+          if (seen.has(r.ref)) return false;
+          seen.add(r.ref);
+          return true;
+        });
+        return unique
+          .map(result => documents.find(doc => doc.id === result.ref))
+          .filter((doc): doc is SearchDocument => Boolean(doc));
+      }
+    } catch {
+      continue;
+    }
+  }
+
+  return [];
+}
+
+async function fetchIndex(baseUrl: string, indexName: string): Promise<SearchPayload> {
+  const requestUrl = joinUrl(baseUrl, indexName);
+
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+
+  try {
+    const response = await fetch(requestUrl, { signal: controller.signal });
+    clearTimeout(timeoutId);
+
+    if (!response.ok) {
+      if (response.status === 404) {
+        throw new Error(`Search index not found. Run "kb build" or "kb serve" to generate it.`);
+      }
+      throw new Error(`Search index request failed (HTTP ${response.status})`);
+    }
+
     return response.json();
-  });
+  } catch (error) {
+    clearTimeout(timeoutId);
+    if (error instanceof Error && error.name === 'AbortError') {
+      throw new Error(`Search index request timed out after ${FETCH_TIMEOUT_MS / 1000}s`);
+    }
+    throw error;
+  }
+}
+
+function formatErrorMessage(error: unknown, attempt: number): string {
+  const cause = error instanceof Error ? error.message : String(error);
+  if (attempt > 0) {
+    return `Failed to load search index after ${attempt + 1} attempts: ${cause}`;
+  }
+  return cause;
 }
 
 function createSearchModal(): SearchModal {
@@ -156,7 +240,7 @@ function createSearchModal(): SearchModal {
   const close = () => {
     root.classList.remove('is-visible');
     input!.value = '';
-    status!.textContent = 'Type to search';
+    status!.textContent = 'Loading index…';
     status!.classList.remove('is-hidden');
     results!.innerHTML = '';
     closeHandler?.();
@@ -173,15 +257,15 @@ function createSearchModal(): SearchModal {
   const renderResults = (documents: SearchDocument[]) => {
     if (!results) return;
     if (documents.length === 0) {
-      results.innerHTML = '<p class="kb-search-modal__empty">No matches yet.</p>';
+      results.innerHTML = '<p class="kb-search-modal__empty">No matches found.</p>';
       return;
     }
 
     results.innerHTML = documents
       .map(doc => `
-        <a class="kb-search-result" href="${doc.url}">
-          <strong>${doc.title}</strong>
-          <span>${doc.snippet}</span>
+        <a class="kb-search-result" href="${escapeAttr(doc.url)}">
+          <strong>${escapeHtml(doc.title)}</strong>
+          <span>${escapeHtml(doc.snippet)}</span>
         </a>
       `)
       .join('');
@@ -204,10 +288,23 @@ function createSearchModal(): SearchModal {
         status.classList.remove('is-hidden');
       }
     },
-    setError(message: string) {
+    setLoading() {
       if (status) {
-        status.textContent = message;
+        status.textContent = 'Loading index…';
         status.classList.remove('is-hidden');
+      }
+    },
+    setError(message: string, retryable?: boolean) {
+      if (!status) return;
+      status.classList.remove('is-hidden');
+      if (retryable) {
+        status.innerHTML = `${escapeHtml(message)} <button class="kb-search-retry" style="margin-left:0.5rem;padding:0.2rem 0.6rem;border-radius:0.4rem;border:1px solid #ccc;background:#fff;cursor:pointer">Retry</button>`;
+        const retryBtn = status.querySelector('.kb-search-retry');
+        retryBtn?.addEventListener('click', () => {
+          window.dispatchEvent(new CustomEvent('kb-search-retry'));
+        });
+      } else {
+        status.textContent = message;
       }
     },
     clearResults() {
@@ -216,6 +313,17 @@ function createSearchModal(): SearchModal {
       }
     }
   };
+}
+
+function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+}
+
+function escapeAttr(value: string): string {
+  return value.replace(/"/g, '&quot;').replace(/'/g, '&#039;');
 }
 
 function joinUrl(baseUrl: string, suffix: string): string {
@@ -228,9 +336,7 @@ function joinUrl(baseUrl: string, suffix: string): string {
 }
 
 function isTyping(element: HTMLElement | null): boolean {
-  if (!element) {
-    return false;
-  }
+  if (!element) return false;
   const tag = element.tagName?.toLowerCase();
   return tag === 'input' || tag === 'textarea' || element.isContentEditable;
 }

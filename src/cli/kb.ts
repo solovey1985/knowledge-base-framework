@@ -102,15 +102,6 @@ async function initProject(projectName?: string): Promise<void> {
     const readmeTpl = await renderTemplate('README.template.md', { PROJECT_NAME: name } as any);
     await fs.writeFile(path.join(projectDir, 'README.md'), readmeTpl);
 
-    const workflowDir = path.join(projectDir, '.github', 'workflows');
-    await fs.mkdir(workflowDir, { recursive: true });
-    const workflowTpl = await renderTemplate(path.join('.github', 'workflows', 'deploy.yml'), {
-        DEFAULT_BRANCH: 'main',
-        NODE_VERSION: '20',
-        OUTPUT_DIR: 'docs'
-    });
-    await fs.writeFile(path.join(workflowDir, 'deploy.yml'), workflowTpl);
-
     await copyFrameworkAssets(projectDir, 'assets');
 
     console.log('✅ Project created successfully!');
@@ -119,42 +110,25 @@ async function initProject(projectName?: string): Promise<void> {
     console.log('  npm install');
     console.log('  npm start');
     console.log('\nEdit kb.config.json to customize your site title, paths, and build output.');
-    console.log('Run `kb update` later to refresh server/build/workflow files after upgrading the framework.');
+    console.log('Run `kb update` later to refresh server/build files after upgrading the framework.');
 }
 
 async function updateProject(): Promise<void> {
     try {
         const projectDir = process.cwd();
         const { config } = await loadConfigFile();
-        console.log('🔄 Updating project files...');
 
         const packagePath = path.join(projectDir, 'package.json');
         const packageRaw = await fs.readFile(packagePath, 'utf-8');
         const packageJson = JSON.parse(packageRaw);
 
-        packageJson.name = packageJson.name || config.title || 'knowledge-base';
-        packageJson.description = packageJson.description || `${packageJson.name} knowledge base`;
-        packageJson.version = packageJson.version || '1.0.0';
-
-        packageJson.scripts = packageJson.scripts || {};
-        packageJson.scripts.start = packageJson.scripts.start || 'node server.js';
-        packageJson.scripts.dev = packageJson.scripts.dev || 'nodemon server.js';
-        packageJson.scripts.build = 'node build.js';
-        packageJson.scripts['build:github'] = 'node build.js';
-        packageJson.scripts['build:watch'] = packageJson.scripts['build:watch'] || 'nodemon build.js';
-
-        packageJson.dependencies = packageJson.dependencies || {};
-        packageJson.dependencies['@solovey1985/knowledge-base-framework'] = FRAMEWORK_VERSION;
-        if (!packageJson.dependencies['express']) {
-            packageJson.dependencies['express'] = EXPRESS_VERSION;
-        }
-
-        packageJson.devDependencies = packageJson.devDependencies || {};
-        if (!packageJson.devDependencies['nodemon']) {
-            packageJson.devDependencies['nodemon'] = NODEMON_VERSION;
-        }
-
-        await fs.writeFile(packagePath, JSON.stringify(packageJson, null, 2));
+        console.log('=== Update Configuration ===');
+        console.log(`  Project name:    ${packageJson.name}`);
+        console.log(`  Project dir:     ${projectDir}`);
+        console.log(`  Server port:     ${config.server?.port || 3000}`);
+        console.log(`  Framework ver:   ${FRAMEWORK_VERSION}`);
+        console.log('===========================');
+        console.log('🔄 Updating project files...');
 
         const tokens = {
             PROJECT_NAME: packageJson.name,
@@ -164,19 +138,14 @@ async function updateProject(): Promise<void> {
         } as Record<string, string | number>;
 
         await fs.writeFile(path.join(projectDir, 'server.js'), await renderTemplate('server.template.js', tokens));
+        console.log('  ✔ server.js');
         await fs.writeFile(path.join(projectDir, 'build.js'), await renderTemplate('build.template.js', tokens));
+        console.log('  ✔ build.js');
         await fs.writeFile(path.join(projectDir, 'README.md'), await renderTemplate('README.template.md', { PROJECT_NAME: packageJson.name }));
-
-        const workflowDir = path.join(projectDir, '.github', 'workflows');
-        await fs.mkdir(workflowDir, { recursive: true });
-        const workflowTpl = await renderTemplate(path.join('.github', 'workflows', 'deploy.yml'), {
-            DEFAULT_BRANCH: 'main',
-            NODE_VERSION: '20',
-            OUTPUT_DIR: config.build?.outputDir || 'docs'
-        });
-        await fs.writeFile(path.join(workflowDir, 'deploy.yml'), workflowTpl);
+        console.log('  ✔ README.md');
 
         await copyFrameworkAssets(projectDir, 'assets');
+        console.log('  ✔ assets/');
 
         console.log('✅ Project files updated. Review git changes before committing.');
     } catch (error) {
@@ -212,7 +181,20 @@ async function buildProject(args: string[]): Promise<void> {
     try {
         const { config } = await loadConfigFile();
 
-        const builder = new StaticSiteBuilder({ ...config, contentRootPath: path.resolve(config.contentRootPath), isStaticSite: true });
+        const isGitHubBuild = config.build?.target === 'github';
+        const resolvedContentRoot = path.resolve(config.contentRootPath);
+        const effectiveBaseUrl = config.baseUrl || '';
+
+        console.log('=== Build Configuration ===');
+        console.log(`  Build target:    ${isGitHubBuild ? 'GitHub Pages' : 'local'}`);
+        console.log(`  Base URL:        "${effectiveBaseUrl}"`);
+        console.log(`  Content root:    ${resolvedContentRoot}`);
+        console.log(`  Output dir:      ${config.build?.outputDir || '(default)'}`);
+        console.log(`  Clean build:     ${config.build?.clean ?? '(default)'}`);
+        console.log(`  Search enabled:  ${config.search?.enabled ?? '(default)'}`);
+        console.log('===========================');
+
+        const builder = new StaticSiteBuilder({ ...config, contentRootPath: resolvedContentRoot, isStaticSite: true });
         await builder.build();
     } catch (error) {
         handleConfigError(error);
@@ -239,7 +221,7 @@ Usage:
 
 Commands:
     init [name]     Create a new knowledge base project
-    update          Refresh scaffolded files (server/build/workflow)
+    update          Refresh scaffolded files (server/build)
     serve           Start development server  
     build           Build static site
     help            Show this help message
