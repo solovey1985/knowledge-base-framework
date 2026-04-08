@@ -5,12 +5,25 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{{page.title}} • {{site.title}}</title>
   <meta name="description" content="{{page.description}}">
+  <script>
+    window.tailwind = window.tailwind || {};
+    window.tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['Inter', 'ui-sans-serif', 'system-ui']
+          }
+        }
+      }
+    };
+  </script>
+  <script src="https://cdn.tailwindcss.com"></script>
   {{#each assets.css}}
     <link rel="stylesheet" href="{{this}}">
   {{/each}}
-  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/highlight.js@11.11.1/styles/github-dark.min.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.11.1/styles/github-dark.min.css">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css" integrity="sha384-n8MVd4RsNIU0tAv4ct0nTaAbDJwPJzDEaqSD1odI+WdtXRGWt2kTvGFasHpSy3SV" crossorigin="anonymous">
-  <script defer src="https://cdn.jsdelivr.net/npm/highlight.js@11.11.1/lib/highlight.min.js"></script>
+  <script defer src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.11.1/highlight.min.js"></script>
   <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js" integrity="sha384-XjKyOOlGwcjNTAIQHIpgOno0Hl1YQqzUOEleOLALmuqehneUG+vnGctmUb0ZY0l8" crossorigin="anonymous"></script>
   <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js" integrity="sha384-+VBxd3r6XgURycqtZ117nYw44OOcIax56Z4dCRWbxyPt0Koah1uHoK0o4+/RRE05" crossorigin="anonymous"></script>
   <script>
@@ -31,61 +44,61 @@
     });
   </script>
 </head>
-<body data-base-url="{{site.baseUrl}}" data-kb-search-index="{{search.indexFileName}}">
-  <div class="kb-overlay" data-kb-overlay></div>
-  <button class="kb-mobile-toggle" data-kb-open-drawer aria-label="Open navigation">
+<body data-base-url="{{site.baseUrl}}" data-kb-search-index="{{search.indexFileName}}" class="min-h-screen bg-slate-50 text-slate-900 font-sans">
+  <div class="kb-overlay fixed inset-0 z-30 hidden bg-slate-950/20 backdrop-blur-sm lg:hidden" data-kb-overlay></div>
+  <button class="kb-mobile-toggle fixed left-4 top-4 z-40 inline-flex h-12 w-12 items-center justify-center rounded-2xl border border-slate-200 bg-white text-slate-700 shadow-lg shadow-slate-200/50 lg:hidden" data-kb-open-drawer aria-label="Open navigation">
     <span></span>
   </button>
 
-  <div class="kb-lightbox" data-kb-lightbox>
-    <div class="kb-lightbox__inner">
-      <button class="kb-lightbox__close" data-kb-lightbox-close aria-label="Close">×</button>
-      <button class="kb-lightbox__nav kb-lightbox__nav--prev" data-kb-lightbox-prev aria-label="Previous">‹</button>
-      <button class="kb-lightbox__nav kb-lightbox__nav--next" data-kb-lightbox-next aria-label="Next">›</button>
-      <button class="kb-lightbox__zoom" data-kb-lightbox-zoom aria-label="Toggle zoom">⤢</button>
-      <img data-kb-lightbox-image alt="Preview" />
-      <div class="kb-lightbox__caption" data-kb-lightbox-caption></div>
+  <div class="kb-lightbox fixed inset-0 z-50 hidden items-center justify-center bg-slate-950/60 p-4" data-kb-lightbox>
+    <div class="kb-lightbox__inner relative flex max-h-[90vh] w-full max-w-6xl flex-col overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-2xl shadow-slate-300/50">
+      <button class="kb-lightbox__close absolute right-4 top-4 rounded-full bg-slate-100 px-3 py-2 text-slate-700" data-kb-lightbox-close aria-label="Close">×</button>
+      <button class="kb-lightbox__nav kb-lightbox__nav--prev absolute left-4 top-1/2 -translate-y-1/2 rounded-full bg-slate-100 px-3 py-2 text-slate-700" data-kb-lightbox-prev aria-label="Previous">‹</button>
+      <button class="kb-lightbox__nav kb-lightbox__nav--next absolute right-4 top-1/2 -translate-y-1/2 rounded-full bg-slate-100 px-3 py-2 text-slate-700" data-kb-lightbox-next aria-label="Next">›</button>
+      <button class="kb-lightbox__zoom absolute bottom-4 right-4 rounded-full bg-slate-100 px-3 py-2 text-slate-700" data-kb-lightbox-zoom aria-label="Toggle zoom">⤢</button>
+      <img class="max-h-[80vh] w-full object-contain" data-kb-lightbox-image alt="Preview" />
+      <div class="kb-lightbox__caption border-t border-slate-200 bg-white px-4 py-3 text-sm text-slate-600" data-kb-lightbox-caption></div>
     </div>
   </div>
 
-  <div class="kb-shell">
-    <aside class="kb-sidebar" data-kb-sidebar>
-      <div class="kb-sidebar__header">
-        <button class="kb-mobile-close" data-kb-close-drawer aria-label="Close navigation">✕</button>
-        <h2 class="kb-sidebar__title">
-          <a href="{{#if site.baseUrl}}{{site.baseUrl}}{{else}}/{{/if}}">{{site.title}}</a>
+  <div class="kb-shell lg:grid lg:grid-cols-[20rem_minmax(0,1fr)] min-h-screen">
+    <aside class="kb-sidebar fixed inset-y-0 left-0 z-40 w-[20rem] -translate-x-full border-r border-slate-200 bg-white/95 backdrop-blur transition-transform lg:sticky lg:translate-x-0" data-kb-sidebar>
+      <div class="kb-sidebar__header border-b border-slate-200 px-6 py-6">
+        <button class="kb-mobile-close mb-4 inline-flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200 bg-slate-50 text-slate-700 lg:hidden" data-kb-close-drawer aria-label="Close navigation">✕</button>
+        <h2 class="kb-sidebar__title text-2xl font-semibold tracking-tight text-slate-900">
+          <a href="{{#if site.baseUrl}}{{site.baseUrl}}{{else}}/{{/if}}" class="hover:text-sky-600">{{site.title}}</a>
         </h2>
-        <p class="kb-sidebar__subtitle">{{site.description}}</p>
+        <p class="kb-sidebar__subtitle mt-2 text-sm leading-6 text-slate-500">{{site.description}}</p>
         {{#if search.enabled}}
-          <button class="kb-search-trigger" data-kb-search-trigger>
+          <button class="kb-search-trigger mt-5 inline-flex w-full items-center justify-between rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700 transition hover:border-sky-400/50 hover:bg-white" data-kb-search-trigger>
             <span>Search docs</span>
-            <kbd>/</kbd>
+            <kbd class="rounded-lg border border-slate-200 bg-white px-2 py-1 text-[11px] text-slate-500">/</kbd>
           </button>
         {{/if}}
       </div>
 
-      <div class="kb-sidebar__actions">
-        <button data-kb-expand-nav>Expand all</button>
-        <button data-kb-collapse-nav>Collapse all</button>
+      <div class="kb-sidebar__actions flex gap-2 px-6 py-4">
+        <button class="flex-1 rounded-full border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700 transition hover:bg-white" data-kb-expand-nav>Expand all</button>
+        <button class="flex-1 rounded-full border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700 transition hover:bg-white" data-kb-collapse-nav>Collapse all</button>
       </div>
 
-      <nav class="kb-nav" data-kb-nav>
+      <nav class="kb-nav max-h-[calc(100vh-13rem)] overflow-y-auto px-4 pb-8" data-kb-nav>
         {{> navigation items=navigation}}
       </nav>
     </aside>
 
-    <main class="kb-content">
-      <div class="kb-content__inner">
-        <div class="kb-content__card">
+    <main class="kb-content min-w-0 bg-slate-50">
+      <div class="kb-content__inner mx-auto max-w-6xl px-4 py-20 sm:px-6 lg:px-8">
+        <div class="kb-content__card rounded-[2rem] border border-slate-200 bg-white p-6 shadow-2xl shadow-slate-200/60 backdrop-blur sm:p-8">
           {{#if breadcrumbs.length}}
-            <div class="kb-breadcrumb">
+            <div class="kb-breadcrumb mb-6 flex flex-wrap gap-2 text-sm text-slate-500">
               {{#each breadcrumbs}}
-                <a href="{{href}}">{{title}}</a>
+                <a href="{{href}}" class="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-sky-700 transition hover:bg-slate-100">{{title}}</a>
               {{/each}}
             </div>
           {{/if}}
 
-          <article class="kb-article">
+          <article class="kb-article min-w-0 text-slate-900">
             {{{content.htmlContent}}}
           </article>
         </div>

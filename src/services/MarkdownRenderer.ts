@@ -1,5 +1,6 @@
 import { marked } from 'marked';
 import hljs from 'highlight.js';
+import path from 'path';
 import { TocItem } from '../core/models';
 
 export interface MarkdownRendererOptions {
@@ -33,97 +34,6 @@ export class MarkdownRenderer {
       breaks: false,  // Disable automatic line breaks to prevent math splitting
       gfm: true,
     });
-
-    // Custom renderer for links and headers
-    const renderer = new marked.Renderer();
-    
-    // Generate slug for header IDs
-    const slugify = (text: string): string => {
-      if (!text || typeof text !== 'string') {
-        text = String(text || '');
-      }
-      return text
-        .toLowerCase()
-        .replace(/[^\w\s-]/g, '') // Remove special characters
-        .replace(/\s+/g, '-') // Replace spaces with -
-        .replace(/--+/g, '-') // Replace multiple - with single -
-        .trim();
-    };
-
-    // Override heading renderer to add anchor IDs
-    renderer.heading = (token: any) => {
-      const text = typeof token === 'object' ? token.text : String(token);
-      const level = token.depth || 1;
-      const slug = slugify(text);
-      
-      this.headers.push({
-        text,
-        level,
-        anchor: slug,
-        children: []
-      });
-      
-      return `<h${level} id="${slug}">
-        <a href="#${slug}" class="header-anchor">
-          ${text}
-        </a>
-      </h${level}>`;
-    };
-    
-    // Override link renderer to handle both dynamic and static sites
-    renderer.link = (token: any) => {
-      // Extract href, title, and text from the token object
-      const href = token.href || '';
-      const title = token.title || '';
-      const text = token.text || '';
-      
-      let processedHref = href;
-      
-      // Handle relative markdown links
-      if (processedHref && processedHref.endsWith('.md') && !processedHref.startsWith('http') && !processedHref.startsWith('/')) {
-        if (this.isStaticSite) {
-          // For static sites, convert .md to .html and keep relative
-          processedHref = processedHref.replace('.md', '.html');
-        } else {
-          // For dynamic sites, convert to content paths
-          processedHref = `/content/${processedHref}`;
-        }
-      }
-      
-      const titleAttr = title ? ` title="${title}"` : '';
-      return `<a href="${processedHref}"${titleAttr}>${text}</a>`;
-    };
-
-    // Override code renderer to support Mermaid diagrams
-    renderer.code = (token: any) => {
-      // Extract code and language from the token object
-      const code = token.text || token.code || '';
-      const language = token.lang || token.language || '';
-      
-      if (language === 'mermaid') {
-        return `<div class="mermaid">${code}</div>`;
-      }
-      
-      // Default code block with syntax highlighting
-      const langClass = language ? ` class="hljs language-${language}"` : ' class="hljs"';
-      
-      try {
-        let highlighted = code;
-        if (language && hljs.getLanguage(language)) {
-          highlighted = hljs.highlight(code, { language }).value;
-        } else if (code) {
-          highlighted = hljs.highlightAuto(code).value;
-        }
-        
-        return `<pre><code${langClass}>${highlighted}</code></pre>`;
-      } catch (error) {
-        console.warn('Highlight.js error for language', language, ':', (error as Error).message);
-        // Fallback to plain code block if highlighting fails
-        return `<pre><code${langClass}>${code}</code></pre>`;
-      }
-    };
-
-    marked.use({ renderer });
   }
 
   /**
@@ -181,7 +91,7 @@ export class MarkdownRenderer {
   /**
    * Render markdown content to HTML
    */
-  async render(markdown: string): Promise<{ html: string; tableOfContents: TocItem[] }> {
+  async render(markdown: string, currentPath: string = this.currentPath): Promise<{ html: string; tableOfContents: TocItem[] }> {
     if (!markdown || typeof markdown !== 'string') {
       return { html: '', tableOfContents: [] };
     }
@@ -191,7 +101,7 @@ export class MarkdownRenderer {
       this.headers = [];
       
       // Render markdown content
-      const html = await marked(markdown);
+      const html = await marked(markdown, { renderer: this.createRenderer(currentPath) });
       
       // Build hierarchical TOC
       const tableOfContents = this.buildTocHierarchy([...this.headers]);
@@ -233,5 +143,127 @@ export class MarkdownRenderer {
     if (options.isStaticSite !== undefined) this.isStaticSite = options.isStaticSite;
     if (options.baseUrl !== undefined) this.baseUrl = options.baseUrl;
     if (options.currentPath !== undefined) this.currentPath = options.currentPath;
+  }
+
+  private createRenderer(currentPath: string): any {
+    const renderer = new marked.Renderer();
+    const currentMarkdownPath = this.normalizePath(currentPath);
+    const currentDirectory = currentMarkdownPath ? path.posix.dirname(currentMarkdownPath) : '';
+
+    const slugify = (text: string): string => {
+      if (!text || typeof text !== 'string') {
+        text = String(text || '');
+      }
+      return text
+        .toLowerCase()
+        .replace(/[^\w\s-]/g, '')
+        .replace(/\s+/g, '-')
+        .replace(/--+/g, '-')
+        .trim();
+    };
+
+    renderer.heading = (token: any) => {
+      const text = typeof token === 'object' ? token.text : String(token);
+      const level = token.depth || 1;
+      const slug = slugify(text);
+
+      this.headers.push({
+        text,
+        level,
+        anchor: slug,
+        children: []
+      });
+
+      return `<h${level} id="${slug}">
+        <a href="#${slug}" class="header-anchor">
+          ${text}
+        </a>
+      </h${level}>`;
+    };
+
+    renderer.link = (token: any) => {
+      const href = token.href || '';
+      const title = token.title || '';
+      const text = token.text || '';
+      const processedHref = this.resolveLinkHref(href, currentDirectory);
+      const titleAttr = title ? ` title="${title}"` : '';
+      return `<a class="kb-markdown-link" href="${processedHref}"${titleAttr}>${text}</a>`;
+    };
+
+    renderer.code = (token: any) => {
+      const code = token.text || token.code || '';
+      const language = token.lang || token.language || '';
+
+      if (language === 'mermaid') {
+        return `<div class="mermaid">${code}</div>`;
+      }
+
+      const langClass = language ? ` class="hljs language-${language}"` : ' class="hljs"';
+
+      try {
+        let highlighted = code;
+        if (language && hljs.getLanguage(language)) {
+          highlighted = hljs.highlight(code, { language }).value;
+        } else if (code) {
+          highlighted = hljs.highlightAuto(code).value;
+        }
+
+        return `<pre><code${langClass}>${highlighted}</code></pre>`;
+      } catch (error) {
+        console.warn('Highlight.js error for language', language, ':', (error as Error).message);
+        return `<pre><code${langClass}>${code}</code></pre>`;
+      }
+    };
+
+    return renderer;
+  }
+
+  private resolveLinkHref(href: string, currentDirectory: string): string {
+    if (!href) {
+      return href;
+    }
+
+    const lower = href.toLowerCase();
+    if (lower.startsWith('http://') || lower.startsWith('https://') || lower.startsWith('mailto:') || lower.startsWith('tel:') || href.startsWith('#')) {
+      return href;
+    }
+
+    const [pathPart, hashPart = ''] = href.split('#', 2);
+    const [relativePart, queryPart = ''] = pathPart.split('?', 2);
+    const normalizedRelative = relativePart.replace(/\\/g, '/');
+
+    const resolved = normalizedRelative.startsWith('/')
+      ? normalizedRelative.replace(/^\/+/, '')
+      : path.posix.normalize(path.posix.join(currentDirectory, normalizedRelative));
+
+    const suffix = queryPart ? `?${queryPart}` : '';
+    const fragment = hashPart ? `#${hashPart}` : '';
+
+    return this.formatDocumentUrl(resolved) + suffix + fragment;
+  }
+
+  private formatDocumentUrl(markdownPath: string): string {
+    const normalized = markdownPath.replace(/\\/g, '/').replace(/^\/+/, '');
+    const docPath = this.isStaticSite
+      ? normalized.replace(/\.md$/i, '.html')
+      : normalized;
+
+    const base = this.baseUrl || '';
+    if (this.isStaticSite) {
+      if (!base || base === '/') {
+        return `/${docPath}`;
+      }
+      return `${base.replace(/\/$/, '')}/${docPath}`;
+    }
+
+    const contentPath = `/content/${docPath}`.replace(/\/+/g, '/');
+    if (!base || base === '/') {
+      return contentPath;
+    }
+    return `${base.replace(/\/$/, '')}${contentPath}`;
+  }
+
+  private normalizePath(value: string): string {
+    return (value || '').replace(/\\/g, '/').replace(/^\/+/, '');
   }
 }

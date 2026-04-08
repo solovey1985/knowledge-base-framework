@@ -22,6 +22,14 @@ kb update
 
 Edit `kb.config.json` to customize your knowledge base settings.
 
+To enable private access, set `auth.enabled` to `true` and provide:
+
+- `auth.username`
+- `auth.password`
+- `auth.cookieSecret`
+
+On Render, these values can also come from `KB_AUTH_*` environment variables.
+
 ## Content Structure
 
 Add your markdown files to the `content/` directory. The framework will automatically:
@@ -34,18 +42,8 @@ Add your markdown files to the `content/` directory. The framework will automati
 
 ## Deployment
 
-The `npm run build` (or `npm run build:github`) command generates a static site in the `docs/` directory.
+This project can run as a server on Render with:
 
-### GitHub Pages
-
-This project includes `.github/workflows/deploy.yml`, which:
-
-1. Runs on pushes to `main` (and can be triggered manually).
-2. Executes `npm ci` followed by `npm run build:github`.
-3. Publishes the `docs/` folder to the `gh-pages` branch via `peaceiris/actions-gh-pages`.
-
-To enable it:
-
-1. Push the repository to GitHub.
-2. Go to **Settings → Pages** and select the `gh-pages` branch as the source.
-3. Adjust the workflow tokens (`DEFAULT_BRANCH`, `OUTPUT_DIR`) if your repository uses different names.
+1. Build command: `npm install`
+2. Start command: `npm start`
+3. Optional private access env vars: `KB_AUTH_ENABLED`, `KB_AUTH_USERNAME`, `KB_AUTH_PASSWORD`, `KB_AUTH_COOKIE_SECRET`

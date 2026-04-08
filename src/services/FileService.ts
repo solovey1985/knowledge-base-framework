@@ -12,6 +12,10 @@ export class FileService {
     this.contentDir = contentDirectory;
   }
 
+  getRootPath(): string {
+    return this.contentDir;
+  }
+
   /**
    * Get directory listing with file types
    */

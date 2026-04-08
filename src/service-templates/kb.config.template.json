@@ -4,16 +4,37 @@
   "description": "{{PROJECT_NAME}} knowledge base",
   "baseUrl": "",
   "server": {
-    "port": 3000
+    "port": 3000,
+    "host": "localhost",
+    "watch": true
   },
   "build": {
     "outputDir": "./docs",
     "clean": true,
-    "generateSitemap": false,
-    "generateRobots": false
+    "generateSitemap": true,
+    "generateRobots": true
+  },
+  "navigation": {
+    "maxDepth": 3,
+    "excludePatterns": ["README.md", ".*"]
   },
   "search": {
     "enabled": true,
-    "indexFileName": "search-index.json"
+    "indexFileName": "search-index.json",
+    "indexFilePath": ".kb-search-index.json",
+    "titleBoost": 10,
+    "bodyBoost": 1
+  },
+  "auth": {
+    "enabled": false,
+    "username": "",
+    "password": "",
+    "cookieName": "kb_auth",
+    "cookieSecret": "",
+    "loginPath": "/login",
+    "logoutPath": "/logout"
+  },
+  "templates": {
+    "assetsBasePath": "/framework-assets"
   }
 }

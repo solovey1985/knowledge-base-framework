@@ -48,6 +48,9 @@ export interface KnowledgeBaseOptions {
 
   /** Search configuration */
   search?: SearchOptions;
+
+  /** Private access configuration */
+  auth?: AuthOptions;
 }
 
 export interface NavigationOptions {
@@ -118,4 +121,39 @@ export interface SearchOptions {
 
   /** Output filename for the search index */
   indexFileName?: string;
+
+  /** Relative path from contentRoot where the index file is stored (server mode) or output (static build) */
+  indexFilePath?: string;
+
+  /** Relative path for serving the index in server mode (default: same as indexFileName) */
+  indexUrlPath?: string;
+
+  /** Boost factor for title field matches in search ranking */
+  titleBoost?: number;
+
+  /** Boost factor for body field matches in search ranking */
+  bodyBoost?: number;
+}
+
+export interface AuthOptions {
+  /** Enable cookie-based login protection */
+  enabled?: boolean;
+
+  /** Login username */
+  username?: string;
+
+  /** Login password */
+  password?: string;
+
+  /** Cookie name used for the auth token */
+  cookieName?: string;
+
+  /** Secret used to sign the auth cookie */
+  cookieSecret?: string;
+
+  /** Login route path */
+  loginPath?: string;
+
+  /** Logout route path */
+  logoutPath?: string;
 }

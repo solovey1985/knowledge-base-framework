@@ -1,27 +1,27 @@
 {{#if items}}
-  <ul class="kb-nav-list">
+  <ul class="kb-nav-list space-y-1">
     {{#each items}}
       <li
-        class="kb-nav-item {{#if isDirectory}}is-directory{{/if}} {{#if isActive}}is-active{{/if}}"
+        class="kb-nav-item rounded-2xl px-2 py-1 {{#if isDirectory}}is-directory{{/if}} {{#if isActive}}is-active{{/if}}"
         data-kb-nav-item
         data-path="{{path}}"
       >
-        <div class="kb-nav-row">
+        <div class="kb-nav-row flex items-center gap-2">
           {{#if isDirectory}}
-            <button class="kb-nav-toggle" data-kb-nav-toggle aria-expanded="true">
+            <button class="kb-nav-toggle inline-flex h-8 w-8 items-center justify-center rounded-xl border border-slate-200 bg-slate-50 text-slate-600 transition hover:bg-white" data-kb-nav-toggle aria-expanded="true">
               <span class="kb-nav-toggle-icon">▾</span>
             </button>
           {{else}}
-            <span class="kb-nav-toggle-spacer"></span>
+            <span class="kb-nav-toggle-spacer inline-flex h-8 w-8"></span>
           {{/if}}
 
-          <a class="kb-nav-link" data-kb-nav-link data-target-path="{{path}}" href="{{href}}">
+          <a class="kb-nav-link flex-1 rounded-xl px-3 py-2 text-sm text-slate-700 transition hover:bg-slate-100 hover:text-slate-900" data-kb-nav-link data-target-path="{{path}}" href="{{href}}">
             {{title}}
           </a>
         </div>
 
         {{#if children.length}}
-          <div class="kb-nav-children" data-kb-nav-children>
+          <div class="kb-nav-children ml-4 border-l border-slate-200 pl-3" data-kb-nav-children>
             {{> navigation items=children}}
           </div>
         {{/if}}

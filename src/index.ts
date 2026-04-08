@@ -5,6 +5,7 @@ export { MarkdownRenderer } from './services/MarkdownRenderer';
 export { GitService } from './services/GitService';
 export { StaticSiteBuilder } from './builders/StaticSiteBuilder';
 export { TemplateRenderer } from './services/TemplateRenderer';
+export { SearchIndexService } from './services/SearchIndexService';
 
 export * from './core/interfaces';
 export * from './core/models';
