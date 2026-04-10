@@ -11,6 +11,7 @@ import { RenderedContent } from '../core/models';
 import { TemplateRenderer, TemplateRendererOptions } from '../services/TemplateRenderer';
 import { TemplateContextBuilder } from '../services/TemplateContextBuilder';
 import { SearchIndexService } from '../services/SearchIndexService';
+import { PluginManager } from '../services/PluginManager';
 
 const IMAGE_EXTENSIONS = new Set(['.png', '.jpg', '.jpeg', '.gif', '.webp', '.bmp', '.svg']);
 const TEXT_PREVIEW_EXTENSIONS = new Set([
@@ -30,6 +31,7 @@ export class KnowledgeBase {
     private templateRenderer: TemplateRenderer;
     private templateContextBuilder: TemplateContextBuilder;
     private searchIndexService: SearchIndexService;
+    private pluginManager: PluginManager;
 
     constructor(options: KnowledgeBaseOptions) {
         this.options = this.mergeWithDefaults(options);
@@ -40,6 +42,7 @@ export class KnowledgeBase {
             baseUrl: this.options.baseUrl || ''
         });
         this.gitService = new GitService();
+        this.pluginManager = new PluginManager(this.options.plugins || []);
         const assetsOverride = this.options.isStaticSite ? undefined : (this.options.templates?.assetsBasePath || '/assets');
         this.templateRenderer = new TemplateRenderer(this.resolveTemplateOptions(this.options.templates));
         this.templateContextBuilder = new TemplateContextBuilder(this.options, assetsOverride);
@@ -107,7 +110,8 @@ export class KnowledgeBase {
                 loginPath: options.auth?.loginPath || '/login',
                 logoutPath: options.auth?.logoutPath || '/logout',
                 ...options.auth
-            }
+            },
+            plugins: options.plugins || []
         };
     }
 
@@ -889,6 +893,10 @@ export class KnowledgeBase {
 
     getSearchIndexService(): SearchIndexService {
         return this.searchIndexService;
+    }
+
+    getPluginManager(): PluginManager {
+        return this.pluginManager;
     }
 
     getTitle(): string {
