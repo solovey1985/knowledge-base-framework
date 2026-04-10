@@ -1,6 +1,6 @@
 {
   "name": "@solovey1985/knowledge-base-framework",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "description": "A flexible framework for building markdown-based knowledge base and documentation portals with support for Mermaid diagrams, LaTeX math, and syntax highlighting",
   "main": "lib/index.js",
   "types": "lib/index.d.ts",
