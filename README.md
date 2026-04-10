@@ -12,6 +12,7 @@ A flexible, Node.js-based framework for building markdown-based knowledge bases 
 - 📱 **Responsive Design** - Mobile-friendly interface
 - 🔍 **Table of Contents** - Automatic TOC generation from headings
 - ⚡ **Fast Builds** - Optimized static site generation
+- 🔌 **Plugin System** - Extend rendering and directory behavior with plugins
 - 🛠️ **TypeScript** - Full TypeScript support with type definitions
 
 ## Quick Start
@@ -108,6 +109,35 @@ import { KnowledgeBase, KnowledgeBaseOptions } from '@solovey1985/knowledge-base
 
 const kb = new KnowledgeBase(options);
 ```
+
+### Plugins
+
+You can extend the framework with plugins via `KnowledgeBaseOptions.plugins`.
+
+```typescript
+import express from 'express';
+import { KnowledgeBase, threeDViewerPlugin } from '@solovey1985/knowledge-base-framework';
+
+const app = express();
+
+const kb = new KnowledgeBase({
+  contentRootPath: './content',
+  title: 'Engineering KB',
+  plugins: [
+    threeDViewerPlugin({
+      extensions: ['.stl', '.obj']
+    })
+  ]
+});
+
+kb.setupMiddleware(app);
+```
+
+Built-in plugin: `threeDViewerPlugin`
+
+- Renders `.stl` and `.obj` files as interactive 3D previews.
+- Adds a dedicated **3D Models** section in directory listings.
+- Keeps original model files downloadable via **Open original** link.
 
 ### Static Site Builder
 
