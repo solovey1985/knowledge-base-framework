@@ -7,6 +7,7 @@ export { StaticSiteBuilder } from './builders/StaticSiteBuilder';
 export { TemplateRenderer } from './services/TemplateRenderer';
 export { SearchIndexService } from './services/SearchIndexService';
 export { PluginManager } from './services/PluginManager';
+export { threeDViewerPlugin } from './plugins/threeDViewerPlugin';
 
 export * from './core/interfaces';
 export * from './core/models';

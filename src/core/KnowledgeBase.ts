@@ -365,7 +365,8 @@ export class KnowledgeBase {
             }
 
             const defaultHref = this.getDefaultDirectoryEntryHref(item, 'files');
-            const decoration = this.pluginManager.resolveDirectoryItem(item, defaultHref);
+            const friendlyHref = this.buildFileRouteUrl(item.path);
+            const decoration = this.pluginManager.resolveDirectoryItem(item, defaultHref, friendlyHref);
             if (!decoration) {
                 continue;
             }
@@ -712,6 +713,15 @@ export class KnowledgeBase {
             href = `${normalized}.html`;
         }
         href = href.startsWith('/') ? href : `/${href}`;
+        if (this.options.isStaticSite && this.options.baseUrl && this.options.baseUrl !== '/') {
+            return `${this.options.baseUrl.replace(/\/$/, '')}${href}`;
+        }
+        return href;
+    }
+
+    private buildFileRouteUrl(relativePath: string): string {
+        const normalized = relativePath.replace(/\\/g, '/').replace(/^\/+/, '');
+        const href = normalized.startsWith('/') ? normalized : `/${normalized}`;
         if (this.options.isStaticSite && this.options.baseUrl && this.options.baseUrl !== '/') {
             return `${this.options.baseUrl.replace(/\/$/, '')}${href}`;
         }

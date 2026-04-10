@@ -49,7 +49,7 @@ export class PluginManager {
     return renderer.render(contextFactory(renderer));
   }
 
-  resolveDirectoryItem(entry: ContentItem, defaultHref: string): PluginDirectoryRenderInfo | null {
+  resolveDirectoryItem(entry: ContentItem, defaultHref: string, friendlyHref: string): PluginDirectoryRenderInfo | null {
     const renderer = this.findRenderer(entry.path);
     if (!renderer?.renderDirectoryItem) {
       return null;
@@ -57,7 +57,8 @@ export class PluginManager {
 
     return renderer.renderDirectoryItem({
       entry,
-      defaultHref
+      defaultHref,
+      friendlyHref
     });
   }
 

@@ -34,6 +34,7 @@ export interface PluginRenderContext {
 export interface PluginDirectoryContext {
   entry: ContentItem;
   defaultHref: string;
+  friendlyHref: string;
 }
 
 export interface ContentRendererPlugin {
