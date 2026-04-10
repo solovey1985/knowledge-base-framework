@@ -67,6 +67,7 @@ export class TemplateContextBuilder {
 
     const css: string[] = [
       `${assetBase}/kb-app.css`,
+      ...this.getPluginAssetFiles('css'),
       ...(this.options.customCssFiles || [])
         .map(file => this.normalizePublicPath(file))
         .filter(Boolean)
@@ -74,6 +75,7 @@ export class TemplateContextBuilder {
 
     const js: string[] = [
       `${assetBase}/kb-app.js`,
+      ...this.getPluginAssetFiles('js'),
       ...(this.options.customJsFiles || [])
         .map(file => this.normalizePublicPath(file))
         .filter(Boolean)
@@ -81,9 +83,23 @@ export class TemplateContextBuilder {
 
     return {
       base: assetBase,
-      css,
-      js
+      css: [...new Set(css)],
+      js: [...new Set(js)]
     };
+  }
+
+  private getPluginAssetFiles(type: 'css' | 'js'): string[] {
+    const assets: string[] = [];
+    for (const plugin of this.options.plugins || []) {
+      const list = type === 'css' ? plugin.clientAssets?.css : plugin.clientAssets?.js;
+      for (const file of list || []) {
+        const normalized = this.normalizePublicPath(file);
+        if (normalized) {
+          assets.push(normalized);
+        }
+      }
+    }
+    return assets;
   }
 
   private normalizePublicPath(value: string): string {
