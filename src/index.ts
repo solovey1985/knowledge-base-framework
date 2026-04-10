@@ -9,6 +9,7 @@ export { SearchIndexService } from './services/SearchIndexService';
 
 export * from './core/interfaces';
 export * from './core/models';
+export * from './core/plugins';
 
 // Re-export for convenience
 export type {
