@@ -190,6 +190,16 @@ export class MarkdownRenderer {
       return `<a class="kb-markdown-link" href="${processedHref}"${titleAttr}>${text}</a>`;
     };
 
+    renderer.image = (token: any) => {
+      const href = token.href || '';
+      const title = token.title || '';
+      const text = token.text || token.alt || '';
+      const processedHref = this.resolveAssetHref(href, currentDirectory);
+      const titleAttr = title ? ` title="${title}"` : '';
+      const altAttr = text ? ` alt="${text}"` : ' alt=""';
+      return `<img src="${processedHref}"${altAttr}${titleAttr}>`;
+    };
+
     renderer.code = (token: any) => {
       const code = token.text || token.code || '';
       const language = token.lang || token.language || '';
@@ -242,6 +252,36 @@ export class MarkdownRenderer {
     return this.formatDocumentUrl(resolved) + suffix + fragment;
   }
 
+  private resolveAssetHref(href: string, currentDirectory: string): string {
+    if (!href) {
+      return href;
+    }
+
+    const lower = href.toLowerCase();
+    if (
+      lower.startsWith('http://') ||
+      lower.startsWith('https://') ||
+      lower.startsWith('data:') ||
+      lower.startsWith('blob:') ||
+      href.startsWith('#')
+    ) {
+      return href;
+    }
+
+    const [pathPart, hashPart = ''] = href.split('#', 2);
+    const [relativePart, queryPart = ''] = pathPart.split('?', 2);
+    const normalizedRelative = relativePart.replace(/\\/g, '/');
+
+    const resolved = normalizedRelative.startsWith('/')
+      ? normalizedRelative.replace(/^\/+/, '')
+      : path.posix.normalize(path.posix.join(currentDirectory, normalizedRelative));
+
+    const suffix = queryPart ? `?${queryPart}` : '';
+    const fragment = hashPart ? `#${hashPart}` : '';
+
+    return this.formatAssetUrl(resolved) + suffix + fragment;
+  }
+
   private formatDocumentUrl(markdownPath: string): string {
     const normalized = markdownPath.replace(/\\/g, '/').replace(/^\/+/, '');
     const docPath = this.isStaticSite
@@ -261,6 +301,20 @@ export class MarkdownRenderer {
       return contentPath;
     }
     return `${base.replace(/\/$/, '')}${contentPath}`;
+  }
+
+  private formatAssetUrl(assetPath: string): string {
+    const normalized = assetPath.replace(/\\/g, '/').replace(/^\/+/, '');
+
+    if (this.isStaticSite) {
+      const base = this.baseUrl || '';
+      if (!base || base === '/') {
+        return `/${normalized}`;
+      }
+      return `${base.replace(/\/$/, '')}/${normalized}`;
+    }
+
+    return `/content/${normalized}`.replace(/\/+/g, '/');
   }
 
   private normalizePath(value: string): string {

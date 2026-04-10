@@ -14,8 +14,9 @@ import { SearchIndexService } from '../services/SearchIndexService';
 
 const IMAGE_EXTENSIONS = new Set(['.png', '.jpg', '.jpeg', '.gif', '.webp', '.bmp', '.svg']);
 const TEXT_PREVIEW_EXTENSIONS = new Set([
-    '.txt', '.log', '.json', '.yml', '.yaml', '.xml', '.csv', '.env', '.ini', '.toml', '.config', '.props', '.targets', '.sln', '.csproj', '.vbproj', '.fsproj', '.js', '.ts', '.tsx', '.jsx', '.py', '.rb', '.java', '.cs', '.go', '.php', '.sh', '.ps1', '.sql', '.html', '.css', '.scss', '.mdx'
+    '.txt', '.log', '.json', '.yml', '.yaml', '.xml', '.csv', '.env', '.ini', '.toml', '.config', '.props', '.targets', '.sln', '.csproj', '.vbproj', '.fsproj', '.js', '.ts', '.tsx', '.jsx', '.py', '.rb', '.java', '.cs', '.go', '.php', '.sh', '.ps1', '.sql', '.css', '.scss', '.mdx'
 ]);
+const HTML_EXTENSION = '.html';
 
 /**
  * Main Knowledge Base framework class
@@ -187,6 +188,13 @@ export class KnowledgeBase {
             const requestPath = (req as any).normalizedContentPath || req.params[0] || '';
 
             try {
+                // HTML files are client-only SPA pages - serve raw immediately
+                if (this.isHtmlExtension(requestPath)) {
+                    const absolutePath = this.fileService.getAbsolutePath(requestPath);
+                    res.sendFile(absolutePath);
+                    return;
+                }
+
                 const shouldRender = requestPath.endsWith('.md') ||
                     requestPath === '' ||
                     !requestPath.includes('.') ||
@@ -222,6 +230,13 @@ export class KnowledgeBase {
             const target = await this.mapFriendlyRequestPath(req.path);
             if (target === null) {
                 return next();
+            }
+
+            // HTML files are client-only SPA pages - serve raw without rendering
+            if (this.isHtmlExtension(target)) {
+                const absolutePath = this.fileService.getAbsolutePath(target);
+                res.sendFile(absolutePath);
+                return;
             }
 
             try {
@@ -322,10 +337,11 @@ export class KnowledgeBase {
         const items = await this.fileService.getDirectoryListing(dirPath);
         const directories = items.filter(item => item.isDirectory).sort(this.sortByName);
         const markdownFiles = items.filter(item => !item.isDirectory && item.extension === '.md').sort(this.sortByName);
+        const htmlFiles = items.filter(item => !item.isDirectory && this.isHtmlExtension(item.name)).sort(this.sortByName);
         const textFiles = items.filter(item => !item.isDirectory && this.isTextPreviewExtension(item.extension)).sort(this.sortByName);
         const imageFiles = items.filter(item => !item.isDirectory && this.isImageExtension(item.extension)).sort(this.sortByName);
         const otherFiles = items
-            .filter(item => !item.isDirectory && !markdownFiles.includes(item) && !textFiles.includes(item) && !imageFiles.includes(item))
+            .filter(item => !item.isDirectory && !markdownFiles.includes(item) && !htmlFiles.includes(item) && !textFiles.includes(item) && !imageFiles.includes(item))
             .sort(this.sortByName);
 
         const galleryId = `gallery-${(dirPath || 'root').replace(/[^a-z0-9-]/gi, '-')}`;
@@ -337,7 +353,7 @@ export class KnowledgeBase {
             `<div class="kb-dir__meta rounded-full border border-slate-200 bg-white px-4 py-2 text-sm text-slate-500">${items.length} item${items.length === 1 ? '' : 's'}</div></header>`
         );
 
-        const renderSection = (entries: typeof items, type: 'directories' | 'documents' | 'text' | 'images' | 'files', title: string) => {
+        const renderSection = (entries: typeof items, type: 'directories' | 'documents' | 'apps' | 'text' | 'images' | 'files', title: string) => {
             if (entries.length === 0) return;
             const galleryAttr = type === 'images' ? ` data-kb-lightbox-gallery="${galleryId}"` : '';
             htmlParts.push(`<section class="kb-dir__section kb-dir__section--${type} space-y-4">`);
@@ -362,14 +378,18 @@ export class KnowledgeBase {
                 } else {
                     const meta = entry.isDirectory
                         ? 'Folder'
-                        : `${entry.extension.toUpperCase().replace('.', '') || 'FILE'} • ${this.formatBytes(entry.size)}`;
+                        : entry.extension === '.html'
+                            ? 'SPA'
+                            : `${entry.extension.toUpperCase().replace('.', '') || 'FILE'} • ${this.formatBytes(entry.size)}`;
                     const href = entry.isDirectory
                         ? this.buildFriendlyUrl(entry.path, 'directory')
-                        : type === 'documents'
-                            ? this.buildFriendlyUrl(entry.path, 'markdown')
-                            : type === 'text'
-                                ? this.buildFriendlyUrl(entry.path, 'text')
-                                : this.buildRawContentUrl(entry.path);
+                        : entry.extension === '.html'
+                            ? this.buildFriendlyUrl(entry.path, 'app')
+                            : type === 'documents'
+                                ? this.buildFriendlyUrl(entry.path, 'markdown')
+                                : type === 'text'
+                                    ? this.buildFriendlyUrl(entry.path, 'text')
+                                    : this.buildRawContentUrl(entry.path);
 
                     const targetAttr = (!entry.isDirectory && type === 'files') ? ' target="_blank" rel="noopener"' : '';
 
@@ -389,6 +409,7 @@ export class KnowledgeBase {
 
         renderSection(directories, 'directories', 'Folders');
         renderSection(markdownFiles, 'documents', 'Documents');
+        renderSection(htmlFiles, 'apps', 'Apps');
         renderSection(textFiles, 'text', 'Text & Code');
         renderSection(imageFiles, 'images', 'Images');
         renderSection(otherFiles, 'files', 'Files');
@@ -568,6 +589,9 @@ export class KnowledgeBase {
     private async mapFriendlyRequestPath(requestPath: string): Promise<string | null> {
         try {
             let decoded = decodeURIComponent(requestPath);
+            if (typeof decoded.normalize === 'function') {
+                decoded = decoded.normalize('NFC');
+            }
             decoded = decoded.replace(/^\/+/, '');
             if (!decoded) {
                 return '';
@@ -578,6 +602,10 @@ export class KnowledgeBase {
             }
 
             if (decoded.toLowerCase().endsWith('.html')) {
+                if (await this.fileService.exists(decoded)) {
+                    return decoded;
+                }
+
                 const base = decoded.replace(/\.html?$/i, '');
                 if (await this.fileService.exists(base)) {
                     return base;
@@ -608,13 +636,15 @@ export class KnowledgeBase {
         }
     }
 
-    private buildFriendlyUrl(relativePath: string, type: 'directory' | 'markdown' | 'text'): string {
+    private buildFriendlyUrl(relativePath: string, type: 'directory' | 'markdown' | 'text' | 'app'): string {
         const normalized = relativePath.replace(/\\/g, '/').replace(/^\/+/, '');
         let href = '';
         if (type === 'directory') {
             href = `${normalized}/`.replace(/\/+/g, '/');
         } else if (type === 'markdown') {
             href = this.options.isStaticSite ? normalized.replace(/\.md$/i, '.html') : normalized;
+        } else if (type === 'app') {
+            href = this.options.isStaticSite ? normalized.replace(/\.html$/i, '.html') : normalized;
         } else {
             href = `${normalized}.html`;
         }
@@ -641,6 +671,10 @@ export class KnowledgeBase {
 
     private isImageExtension(extension: string): boolean {
         return IMAGE_EXTENSIONS.has(extension.toLowerCase());
+    }
+
+    private isHtmlExtension(path: string): boolean {
+        return path.toLowerCase().endsWith(HTML_EXTENSION);
     }
 
     private sortByName<T extends { name: string }>(a: T, b: T): number {
