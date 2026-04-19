@@ -315,6 +315,22 @@ export class KnowledgeBase {
 
             const extension = path.extname(targetPath).toLowerCase();
 
+            const pluginContent = await this.pluginManager.renderByFileType(targetPath, () => ({
+                requestPath: targetPath,
+                extension,
+                fileService: this.fileService,
+                readFile: (relativePath: string) => this.fileService.readFile(relativePath),
+                renderMarkdown: (markdown: string, currentPath: string = targetPath) => this.markdownRenderer.render(markdown, currentPath),
+                getStats: (relativePath: string) => this.fileService.getStats(relativePath),
+                buildRawContentUrl: (relativePath: string) => this.buildRawContentUrl(relativePath),
+                buildFriendlyUrl: (relativePath: string, type: 'directory' | 'markdown' | 'text' | 'app') => this.buildFriendlyUrl(relativePath, type),
+                composeContentResponse: (contentPath: string, title: string, html: string, description?: string, metadata: Record<string, unknown> = {}) =>
+                    this.composeContentResponse(contentPath, title, html, description, metadata)
+            }));
+            if (pluginContent) {
+                return pluginContent;
+            }
+
             if (extension === '.md') {
                 return await this.renderMarkdownFile(targetPath, false);
             }
@@ -325,21 +341,6 @@ export class KnowledgeBase {
 
             if (this.isImageExtension(extension)) {
                 return await this.renderImageFile(targetPath);
-            }
-
-            const pluginContent = await this.pluginManager.renderByFileType(targetPath, () => ({
-                requestPath: targetPath,
-                extension,
-                fileService: this.fileService,
-                readFile: (relativePath: string) => this.fileService.readFile(relativePath),
-                getStats: (relativePath: string) => this.fileService.getStats(relativePath),
-                buildRawContentUrl: (relativePath: string) => this.buildRawContentUrl(relativePath),
-                buildFriendlyUrl: (relativePath: string, type: 'directory' | 'markdown' | 'text' | 'app') => this.buildFriendlyUrl(relativePath, type),
-                composeContentResponse: (contentPath: string, title: string, html: string, description?: string, metadata: Record<string, unknown> = {}) =>
-                    this.composeContentResponse(contentPath, title, html, description, metadata)
-            }));
-            if (pluginContent) {
-                return pluginContent;
             }
 
             return null;
@@ -390,7 +391,7 @@ export class KnowledgeBase {
         }
 
         const directories = items.filter(item => item.isDirectory).sort(this.sortByName);
-        const markdownFiles = items.filter(item => !item.isDirectory && item.extension === '.md').sort(this.sortByName);
+        const markdownFiles = items.filter(item => !item.isDirectory && item.extension === '.md' && !pluginSectionEntries.has(item.path)).sort(this.sortByName);
         const htmlFiles = items.filter(item => !item.isDirectory && this.isHtmlExtension(item.name) && !pluginSectionEntries.has(item.path)).sort(this.sortByName);
         const textFiles = items.filter(item => !item.isDirectory && this.isTextPreviewExtension(item.extension) && !pluginSectionEntries.has(item.path)).sort(this.sortByName);
         const imageFiles = items.filter(item => !item.isDirectory && this.isImageExtension(item.extension) && !pluginSectionEntries.has(item.path)).sort(this.sortByName);

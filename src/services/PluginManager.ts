@@ -64,12 +64,12 @@ export class PluginManager {
 
   private findRenderer(requestPath: string): ContentRendererPlugin | null {
     const extension = path.extname(requestPath).toLowerCase();
-    if (!extension) {
-      return null;
-    }
-
     for (const renderer of this.renderers) {
-      if (renderer.extensions.some(item => item.toLowerCase() === extension)) {
+      if (renderer.matches && renderer.matches(requestPath, extension)) {
+        return renderer;
+      }
+
+      if (extension && (renderer.extensions || []).some(item => item.toLowerCase() === extension)) {
         return renderer;
       }
     }
