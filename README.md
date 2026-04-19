@@ -141,6 +141,62 @@ Built-in plugin: `threeDViewerPlugin`
 - Adds a dedicated **3D Models** section in directory listings.
 - Keeps original model files downloadable via **Open original** link.
 
+Built-in plugin: `interviewPrepPlugin`
+
+- Activates on `*.interview.md` pages.
+- Supports hidden-answer questions, multiple-choice questions, and code-completion exercises.
+- Persists interview progress locally in the browser.
+
+Example interview content file:
+
+````md
+---
+title: TypeScript Interview Practice
+interview:
+  persistProgress: true
+---
+
+# TypeScript Interview Practice
+
+```interview-question
+What is the difference between `interface` and `type` in TypeScript?
+---
+answer:
+Interfaces support declaration merging. Types are more general and can model unions and primitives.
+hints:
+- One supports declaration merging.
+- One is often used with unions.
+```
+
+```interview-choice
+Which statement about closures is correct?
+---
+options:
+- A closure only exists in async functions.
+- A closure keeps access to variables from its lexical scope.
+- A closure copies outer values when the function is created.
+correct: 1
+explanation:
+Closures keep access to the lexical environment in which they were created.
+```
+
+```interview-code
+language: ts
+prompt: Complete the function so it returns only even values.
+starter:
+function onlyEven(values: number[]): number[] {
+  return values.
+}
+solution:
+function onlyEven(values: number[]): number[] {
+  return values.filter(value => value % 2 === 0);
+}
+checks:
+- includes: filter
+- includes: % 2 === 0
+```
+````
+
 Example `kb.plugins.json`:
 
 ```json
@@ -152,6 +208,13 @@ Example `kb.plugins.json`:
       "options": {
         "extensions": [".stl", ".obj"],
         "sectionTitle": "3D Models"
+      }
+    },
+    {
+      "name": "interviewPrep",
+      "enabled": true,
+      "options": {
+        "sectionTitle": "Interview Prep"
       }
     }
   ]
