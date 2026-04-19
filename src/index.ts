@@ -7,6 +7,7 @@ export { StaticSiteBuilder } from './builders/StaticSiteBuilder';
 export { TemplateRenderer } from './services/TemplateRenderer';
 export { SearchIndexService } from './services/SearchIndexService';
 export { PluginManager } from './services/PluginManager';
+export { interviewPrepPlugin } from './plugins/interviewPrepPlugin';
 export { threeDViewerPlugin } from './plugins/threeDViewerPlugin';
 export { loadPluginsFromFile, resolvePluginsFromSettings } from './plugins/pluginSettings';
 
