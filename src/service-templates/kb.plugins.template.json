@@ -17,6 +17,13 @@
       "options": {
         "sectionTitle": "Interview Prep"
       }
+    },
+    {
+      "name": "techMemory",
+      "enabled": false,
+      "options": {
+        "sectionTitle": "Technical Memory"
+      }
     }
   ]
 }

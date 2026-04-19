@@ -2,6 +2,7 @@ import fs from 'fs';
 import path from 'path';
 import { KnowledgeBasePlugin } from '../core/plugins';
 import { InterviewPrepPluginOptions, interviewPrepPlugin } from './interviewPrepPlugin';
+import { TechMemoryPluginOptions, techMemoryPlugin } from './techMemoryPlugin';
 import { ThreeDViewerPluginOptions, threeDViewerPlugin } from './threeDViewerPlugin';
 
 export interface PluginSettingsEntry {
@@ -43,6 +44,11 @@ export function resolvePluginsFromSettings(settings: PluginSettingsFile): Knowle
       continue;
     }
 
+    if (name === 'tech-memory') {
+      plugins.push(techMemoryPlugin((entry.options || {}) as TechMemoryPluginOptions));
+      continue;
+    }
+
     throw new Error(`Unknown plugin "${entry.name}" in plugin settings.`);
   }
 
@@ -56,5 +62,6 @@ function normalizePluginName(name: string): string {
     .replace(/[_\s]+/g, '-')
     .replace(/plugin$/g, '')
     .replace(/three[d]?viewer/g, 'three-d-viewer')
-    .replace(/interviewprep/g, 'interview-prep');
+    .replace(/interviewprep/g, 'interview-prep')
+    .replace(/techmemory/g, 'tech-memory');
 }

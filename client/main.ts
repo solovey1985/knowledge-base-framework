@@ -4,6 +4,7 @@ import { initSearch } from './search';
 import { initMermaid } from './mermaid';
 import { initLightbox } from './lightbox';
 import { initInterviewPrep } from './interviewPrep';
+import { initTechMemory } from './techMemory';
 import { initThreeViewer } from './threeViewer';
 
 const DATA_BASE_ATTR = 'data-base-url';
@@ -32,5 +33,6 @@ ready(() => {
   initMermaid();
   initLightbox();
   initInterviewPrep();
+  initTechMemory();
   initThreeViewer();
 });
