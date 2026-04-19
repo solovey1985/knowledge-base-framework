@@ -170,7 +170,7 @@ export class KnowledgeBase {
 
             app.use((req: Request, res: Response, next: NextFunction) => {
                 const pathname = req.path || '';
-                if (pathname.startsWith('/assets') || pathname === auth.loginPath || pathname === auth.logoutPath) {
+                if (pathname.startsWith('/assets') || pathname.startsWith('/framework-assets') || pathname === auth.loginPath || pathname === auth.logoutPath) {
                     return next();
                 }
 
@@ -228,7 +228,7 @@ export class KnowledgeBase {
 
         // Friendly HTML routes
         app.get('*', async (req: Request, res: Response, next: NextFunction) => {
-            if (req.path.startsWith('/content') || req.path.startsWith('/assets')) {
+            if (req.path.startsWith('/content') || req.path.startsWith('/assets') || req.path.startsWith('/framework-assets')) {
                 return next();
             }
 

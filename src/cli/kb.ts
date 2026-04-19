@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import * as path from 'path';
 import * as fs from 'fs/promises';
+import { existsSync } from 'fs';
 import express from 'express';
 import frameworkPackage from '../../package.json';
 import { KnowledgeBase, StaticSiteBuilder, loadPluginsFromFile } from '../index';
@@ -172,12 +173,21 @@ async function serveProject(args: string[]): Promise<void> {
 
         const app = express();
         const projectAssetsDir = path.resolve('assets');
-        const frameworkAssetsDir = path.resolve(__dirname, '..', '..', 'templates', 'default', 'assets');
+        const frameworkRoot = path.resolve(__dirname, '..', '..');
+        const frameworkAssetsDir = resolveFrameworkAssetsDir(frameworkRoot, projectAssetsDir);
 
-        app.use('/assets', express.static(projectAssetsDir));
-        app.use('/assets', express.static(frameworkAssetsDir));
+        app.use('/assets', express.static(projectAssetsDir, { fallthrough: false }));
+        app.use('/framework-assets', express.static(frameworkAssetsDir, { fallthrough: false }));
 
-        const kb = new KnowledgeBase({ ...config, plugins, contentRootPath: path.resolve(config.contentRootPath) });
+        const kb = new KnowledgeBase({
+            ...config,
+            plugins,
+            contentRootPath: path.resolve(config.contentRootPath),
+            templates: {
+                ...config.templates,
+                assetsBasePath: config.templates?.assetsBasePath || '/framework-assets'
+            }
+        });
 
         kb.setupMiddleware(app);
 
@@ -219,6 +229,22 @@ function resolvePluginsForConfig(config: { pluginsConfigPath?: string }, baseDir
     const configuredPath = config.pluginsConfigPath || './kb.plugins.json';
     const absolutePath = path.resolve(baseDir, configuredPath);
     return loadPluginsFromFile(absolutePath);
+}
+
+function resolveFrameworkAssetsDir(frameworkRoot: string, fallbackDir: string): string {
+    const candidates = [
+        path.join(frameworkRoot, 'templates', 'default', 'assets'),
+        path.join(frameworkRoot, 'assets'),
+        path.join(frameworkRoot, 'lib', 'templates', 'default', 'assets')
+    ];
+
+    for (const candidate of candidates) {
+        if (existsSync(path.join(candidate, 'kb-app.js'))) {
+            return candidate;
+        }
+    }
+
+    return fallbackDir;
 }
 
 function handleConfigError(error: unknown): void {
