@@ -1,0 +1,15 @@
+{
+  "plugins": [
+    {
+      "name": "threeDViewer",
+      "enabled": true,
+      "options": {
+        "extensions": [
+          ".stl",
+          ".obj"
+        ],
+        "sectionTitle": "3D Models"
+      }
+    }
+  ]
+}

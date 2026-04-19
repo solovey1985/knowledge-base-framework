@@ -1,4 +1,5 @@
 import { NavigationItem } from './models';
+import { KnowledgeBasePlugin } from './plugins';
 
 export interface KnowledgeBaseOptions {
   /** The root directory containing the content files */
@@ -51,6 +52,12 @@ export interface KnowledgeBaseOptions {
 
   /** Private access configuration */
   auth?: AuthOptions;
+
+  /** Optional content/UI plugins */
+  plugins?: KnowledgeBasePlugin[];
+
+  /** Path to plugin settings JSON file (relative to config file) */
+  pluginsConfigPath?: string;
 }
 
 export interface NavigationOptions {

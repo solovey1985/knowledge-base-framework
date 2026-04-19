@@ -7,10 +7,12 @@ import { FileService } from '../services/FileService';
 import { NavigationService } from '../services/NavigationService';
 import { MarkdownRenderer } from '../services/MarkdownRenderer';
 import { GitService } from '../services/GitService';
-import { RenderedContent } from '../core/models';
+import { ContentItem, RenderedContent } from '../core/models';
+import { PluginDirectoryRenderInfo } from '../core/plugins';
 import { TemplateRenderer, TemplateRendererOptions } from '../services/TemplateRenderer';
 import { TemplateContextBuilder } from '../services/TemplateContextBuilder';
 import { SearchIndexService } from '../services/SearchIndexService';
+import { PluginManager } from '../services/PluginManager';
 
 const IMAGE_EXTENSIONS = new Set(['.png', '.jpg', '.jpeg', '.gif', '.webp', '.bmp', '.svg']);
 const TEXT_PREVIEW_EXTENSIONS = new Set([
@@ -30,6 +32,7 @@ export class KnowledgeBase {
     private templateRenderer: TemplateRenderer;
     private templateContextBuilder: TemplateContextBuilder;
     private searchIndexService: SearchIndexService;
+    private pluginManager: PluginManager;
 
     constructor(options: KnowledgeBaseOptions) {
         this.options = this.mergeWithDefaults(options);
@@ -40,6 +43,7 @@ export class KnowledgeBase {
             baseUrl: this.options.baseUrl || ''
         });
         this.gitService = new GitService();
+        this.pluginManager = new PluginManager(this.options.plugins || []);
         const assetsOverride = this.options.isStaticSite ? undefined : (this.options.templates?.assetsBasePath || '/assets');
         this.templateRenderer = new TemplateRenderer(this.resolveTemplateOptions(this.options.templates));
         this.templateContextBuilder = new TemplateContextBuilder(this.options, assetsOverride);
@@ -107,7 +111,8 @@ export class KnowledgeBase {
                 loginPath: options.auth?.loginPath || '/login',
                 logoutPath: options.auth?.logoutPath || '/logout',
                 ...options.auth
-            }
+            },
+            plugins: options.plugins || []
         };
     }
 
@@ -322,6 +327,21 @@ export class KnowledgeBase {
                 return await this.renderImageFile(targetPath);
             }
 
+            const pluginContent = await this.pluginManager.renderByFileType(targetPath, () => ({
+                requestPath: targetPath,
+                extension,
+                fileService: this.fileService,
+                readFile: (relativePath: string) => this.fileService.readFile(relativePath),
+                getStats: (relativePath: string) => this.fileService.getStats(relativePath),
+                buildRawContentUrl: (relativePath: string) => this.buildRawContentUrl(relativePath),
+                buildFriendlyUrl: (relativePath: string, type: 'directory' | 'markdown' | 'text' | 'app') => this.buildFriendlyUrl(relativePath, type),
+                composeContentResponse: (contentPath: string, title: string, html: string, description?: string, metadata: Record<string, unknown> = {}) =>
+                    this.composeContentResponse(contentPath, title, html, description, metadata)
+            }));
+            if (pluginContent) {
+                return pluginContent;
+            }
+
             return null;
 
         } catch (error) {
@@ -335,13 +355,47 @@ export class KnowledgeBase {
      */
     private async renderDirectoryListing(dirPath: string): Promise<RenderedContent> {
         const items = await this.fileService.getDirectoryListing(dirPath);
+        const pluginDecorations = new Map<string, PluginDirectoryRenderInfo>();
+        const pluginSectionEntries = new Set<string>();
+        const pluginSections = new Map<string, { title: string; entries: ContentItem[] }>();
+
+        for (const item of items) {
+            if (item.isDirectory) {
+                continue;
+            }
+
+            const defaultHref = this.getDefaultDirectoryEntryHref(item, 'files');
+            const friendlyHref = this.buildFileRouteUrl(item.path);
+            const decoration = this.pluginManager.resolveDirectoryItem(item, defaultHref, friendlyHref);
+            if (!decoration) {
+                continue;
+            }
+
+            pluginDecorations.set(item.path, decoration);
+            if (!decoration.section) {
+                continue;
+            }
+
+            const sectionKey = decoration.section;
+            const existing = pluginSections.get(sectionKey);
+            if (existing) {
+                existing.entries.push(item);
+            } else {
+                pluginSections.set(sectionKey, {
+                    title: decoration.sectionTitle || sectionKey,
+                    entries: [item]
+                });
+            }
+            pluginSectionEntries.add(item.path);
+        }
+
         const directories = items.filter(item => item.isDirectory).sort(this.sortByName);
         const markdownFiles = items.filter(item => !item.isDirectory && item.extension === '.md').sort(this.sortByName);
-        const htmlFiles = items.filter(item => !item.isDirectory && this.isHtmlExtension(item.name)).sort(this.sortByName);
-        const textFiles = items.filter(item => !item.isDirectory && this.isTextPreviewExtension(item.extension)).sort(this.sortByName);
-        const imageFiles = items.filter(item => !item.isDirectory && this.isImageExtension(item.extension)).sort(this.sortByName);
+        const htmlFiles = items.filter(item => !item.isDirectory && this.isHtmlExtension(item.name) && !pluginSectionEntries.has(item.path)).sort(this.sortByName);
+        const textFiles = items.filter(item => !item.isDirectory && this.isTextPreviewExtension(item.extension) && !pluginSectionEntries.has(item.path)).sort(this.sortByName);
+        const imageFiles = items.filter(item => !item.isDirectory && this.isImageExtension(item.extension) && !pluginSectionEntries.has(item.path)).sort(this.sortByName);
         const otherFiles = items
-            .filter(item => !item.isDirectory && !markdownFiles.includes(item) && !htmlFiles.includes(item) && !textFiles.includes(item) && !imageFiles.includes(item))
+            .filter(item => !item.isDirectory && !pluginSectionEntries.has(item.path) && !markdownFiles.includes(item) && !htmlFiles.includes(item) && !textFiles.includes(item) && !imageFiles.includes(item))
             .sort(this.sortByName);
 
         const galleryId = `gallery-${(dirPath || 'root').replace(/[^a-z0-9-]/gi, '-')}`;
@@ -376,13 +430,18 @@ export class KnowledgeBase {
                         </div>
                     `);
                 } else {
+                    const pluginDecoration = pluginDecorations.get(entry.path);
                     const meta = entry.isDirectory
                         ? 'Folder'
+                        : pluginDecoration?.meta
+                            ? pluginDecoration.meta
                         : entry.extension === '.html'
                             ? 'SPA'
                             : `${entry.extension.toUpperCase().replace('.', '') || 'FILE'} • ${this.formatBytes(entry.size)}`;
-                    const href = entry.isDirectory
-                        ? this.buildFriendlyUrl(entry.path, 'directory')
+                    const href = pluginDecoration?.href
+                        ? pluginDecoration.href
+                        : entry.isDirectory
+                            ? this.buildFriendlyUrl(entry.path, 'directory')
                         : entry.extension === '.html'
                             ? this.buildFriendlyUrl(entry.path, 'app')
                             : type === 'documents'
@@ -391,7 +450,9 @@ export class KnowledgeBase {
                                     ? this.buildFriendlyUrl(entry.path, 'text')
                                     : this.buildRawContentUrl(entry.path);
 
-                    const targetAttr = (!entry.isDirectory && type === 'files') ? ' target="_blank" rel="noopener"' : '';
+                    const shouldOpenInNewTab = pluginDecoration?.targetBlank
+                        || (!entry.isDirectory && type === 'files');
+                    const targetAttr = shouldOpenInNewTab ? ' target="_blank" rel="noopener"' : '';
 
                     htmlParts.push(`
                         <div class="kb-dir__entry rounded-3xl border border-slate-200 bg-white p-4 shadow-lg shadow-slate-200/50 transition hover:border-sky-300 hover:bg-slate-50">
@@ -409,6 +470,9 @@ export class KnowledgeBase {
 
         renderSection(directories, 'directories', 'Folders');
         renderSection(markdownFiles, 'documents', 'Documents');
+        for (const section of pluginSections.values()) {
+            renderSection(section.entries.sort(this.sortByName), 'files', section.title);
+        }
         renderSection(htmlFiles, 'apps', 'Apps');
         renderSection(textFiles, 'text', 'Text & Code');
         renderSection(imageFiles, 'images', 'Images');
@@ -655,6 +719,15 @@ export class KnowledgeBase {
         return href;
     }
 
+    private buildFileRouteUrl(relativePath: string): string {
+        const normalized = relativePath.replace(/\\/g, '/').replace(/^\/+/, '');
+        const href = normalized.startsWith('/') ? normalized : `/${normalized}`;
+        if (this.options.isStaticSite && this.options.baseUrl && this.options.baseUrl !== '/') {
+            return `${this.options.baseUrl.replace(/\/$/, '')}${href}`;
+        }
+        return href;
+    }
+
     private buildRawContentUrl(relativePath: string): string {
         const normalized = relativePath.replace(/\\/g, '/');
         if (this.options.isStaticSite) {
@@ -663,6 +736,26 @@ export class KnowledgeBase {
             return `${prefix}/${normalized}`.replace(/\/+/g, '/');
         }
         return `/content/${normalized}`;
+    }
+
+    private getDefaultDirectoryEntryHref(entry: ContentItem, sectionType: 'directories' | 'documents' | 'apps' | 'text' | 'images' | 'files'): string {
+        if (entry.isDirectory) {
+            return this.buildFriendlyUrl(entry.path, 'directory');
+        }
+
+        if (entry.extension === '.html') {
+            return this.buildFriendlyUrl(entry.path, 'app');
+        }
+
+        if (sectionType === 'documents') {
+            return this.buildFriendlyUrl(entry.path, 'markdown');
+        }
+
+        if (sectionType === 'text') {
+            return this.buildFriendlyUrl(entry.path, 'text');
+        }
+
+        return this.buildRawContentUrl(entry.path);
     }
 
     private isTextPreviewExtension(extension: string): boolean {
@@ -889,6 +982,10 @@ export class KnowledgeBase {
 
     getSearchIndexService(): SearchIndexService {
         return this.searchIndexService;
+    }
+
+    getPluginManager(): PluginManager {
+        return this.pluginManager;
     }
 
     getTitle(): string {

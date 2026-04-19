@@ -3,7 +3,7 @@ import * as path from 'path';
 import * as fs from 'fs/promises';
 import express from 'express';
 import frameworkPackage from '../../package.json';
-import { KnowledgeBase, StaticSiteBuilder, KnowledgeBaseOptions } from '../index';
+import { KnowledgeBase, StaticSiteBuilder, loadPluginsFromFile } from '../index';
 import { ConfigError, loadConfigFile } from './configLoader';
 
 const templatesDir = path.join(__dirname, '..', 'service-templates');
@@ -87,6 +87,9 @@ async function initProject(projectName?: string): Promise<void> {
     const configTpl = await renderTemplate('kb.config.template.json', { PROJECT_NAME: name } as any);
     await fs.writeFile(path.join(projectDir, 'kb.config.json'), configTpl);
 
+    const pluginsTpl = await fs.readFile(path.join(templatesDir, 'kb.plugins.template.json'), 'utf-8');
+    await fs.writeFile(path.join(projectDir, 'kb.plugins.json'), pluginsTpl);
+
     const gitignoreTemplate = await fs.readFile(path.join(templatesDir, '.gitignore.template'), 'utf-8');
     await fs.writeFile(path.join(projectDir, '.gitignore'), gitignoreTemplate);
 
@@ -144,6 +147,15 @@ async function updateProject(): Promise<void> {
         await fs.writeFile(path.join(projectDir, 'README.md'), await renderTemplate('README.template.md', { PROJECT_NAME: packageJson.name }));
         console.log('  ✔ README.md');
 
+        const pluginsConfigPath = path.join(projectDir, config.pluginsConfigPath || 'kb.plugins.json');
+        try {
+            await fs.access(pluginsConfigPath);
+        } catch {
+            const pluginsTpl = await fs.readFile(path.join(templatesDir, 'kb.plugins.template.json'), 'utf-8');
+            await fs.writeFile(pluginsConfigPath, pluginsTpl);
+            console.log(`  ✔ ${path.basename(pluginsConfigPath)}`);
+        }
+
         await copyFrameworkAssets(projectDir, 'assets');
         console.log('  ✔ assets/');
 
@@ -155,7 +167,8 @@ async function updateProject(): Promise<void> {
 
 async function serveProject(args: string[]): Promise<void> {
     try {
-        const { config } = await loadConfigFile();
+        const { config, path: configPath } = await loadConfigFile();
+        const plugins = resolvePluginsForConfig(config, path.dirname(configPath));
 
         const app = express();
         const projectAssetsDir = path.resolve('assets');
@@ -164,7 +177,7 @@ async function serveProject(args: string[]): Promise<void> {
         app.use('/assets', express.static(projectAssetsDir));
         app.use('/assets', express.static(frameworkAssetsDir));
 
-        const kb = new KnowledgeBase({ ...config, contentRootPath: path.resolve(config.contentRootPath) });
+        const kb = new KnowledgeBase({ ...config, plugins, contentRootPath: path.resolve(config.contentRootPath) });
 
         kb.setupMiddleware(app);
 
@@ -179,7 +192,8 @@ async function serveProject(args: string[]): Promise<void> {
 
 async function buildProject(args: string[]): Promise<void> {
     try {
-        const { config } = await loadConfigFile();
+        const { config, path: configPath } = await loadConfigFile();
+        const plugins = resolvePluginsForConfig(config, path.dirname(configPath));
 
         const isGitHubBuild = config.build?.target === 'github';
         const resolvedContentRoot = path.resolve(config.contentRootPath);
@@ -194,11 +208,17 @@ async function buildProject(args: string[]): Promise<void> {
         console.log(`  Search enabled:  ${config.search?.enabled ?? '(default)'}`);
         console.log('===========================');
 
-        const builder = new StaticSiteBuilder({ ...config, contentRootPath: resolvedContentRoot, isStaticSite: true });
+        const builder = new StaticSiteBuilder({ ...config, plugins, contentRootPath: resolvedContentRoot, isStaticSite: true });
         await builder.build();
     } catch (error) {
         handleConfigError(error);
     }
+}
+
+function resolvePluginsForConfig(config: { pluginsConfigPath?: string }, baseDir: string): ReturnType<typeof loadPluginsFromFile> {
+    const configuredPath = config.pluginsConfigPath || './kb.plugins.json';
+    const absolutePath = path.resolve(baseDir, configuredPath);
+    return loadPluginsFromFile(absolutePath);
 }
 
 function handleConfigError(error: unknown): void {
