@@ -55,6 +55,9 @@ export interface KnowledgeBaseOptions {
 
   /** Optional content/UI plugins */
   plugins?: KnowledgeBasePlugin[];
+
+  /** Path to plugin settings JSON file (relative to config file) */
+  pluginsConfigPath?: string;
 }
 
 export interface NavigationOptions {

@@ -8,6 +8,7 @@ export { TemplateRenderer } from './services/TemplateRenderer';
 export { SearchIndexService } from './services/SearchIndexService';
 export { PluginManager } from './services/PluginManager';
 export { threeDViewerPlugin } from './plugins/threeDViewerPlugin';
+export { loadPluginsFromFile, resolvePluginsFromSettings } from './plugins/pluginSettings';
 
 export * from './core/interfaces';
 export * from './core/models';

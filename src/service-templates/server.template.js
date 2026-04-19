@@ -1,6 +1,6 @@
 const express = require('express');
 const path = require('path');
-const { KnowledgeBase } = require('@solovey1985/knowledge-base-framework');
+const { KnowledgeBase, loadPluginsFromFile } = require('@solovey1985/knowledge-base-framework');
 const config = require('./kb.config.json');
 
 const app = express();
@@ -20,12 +20,16 @@ const auth = {
   logoutPath: process.env.KB_AUTH_LOGOUT_PATH || config.auth?.logoutPath || '/logout'
 };
 
+const pluginsConfigPath = path.resolve(process.env.KB_PLUGINS_CONFIG || config.pluginsConfigPath || './kb.plugins.json');
+const plugins = loadPluginsFromFile(pluginsConfigPath);
+
 app.use('{{ASSETS_URL}}', express.static(projectAssetsDir));
 app.use('/framework-assets', express.static(frameworkAssetsDir));
 
 const kb = new KnowledgeBase({
   ...config,
   contentRootPath: path.resolve(config.contentRootPath),
+  plugins,
   auth,
   templates: {
     ...config.templates,

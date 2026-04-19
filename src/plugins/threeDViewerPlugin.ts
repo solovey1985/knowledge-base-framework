@@ -34,21 +34,25 @@ export function threeDViewerPlugin(options: ThreeDViewerPluginOptions = {}): Kno
           const escapedTitle = escapeHtml(displayName);
           const escapedPath = escapeHtml(context.requestPath);
           const html = `
-            <div class="kb-model space-y-6 rounded-3xl border border-slate-200 bg-white p-6 shadow-xl shadow-slate-200/50">
-              <header class="kb-model__header flex flex-wrap items-end justify-between gap-4 border-b border-slate-200 pb-5">
+            <div class="kb-model flex h-full w-full flex-col bg-slate-950 text-slate-100">
+              <header class="kb-model__header flex flex-wrap items-end justify-between gap-4 border-b border-slate-700 px-5 py-4">
                 <div>
-                  <p class="kb-model__path text-xs uppercase tracking-[0.3em] text-sky-700">${escapedPath}</p>
-                  <h1 class="mt-2 text-3xl font-semibold tracking-tight text-slate-900">${escapedTitle}</h1>
+                  <p class="kb-model__path text-xs uppercase tracking-[0.3em] text-sky-300">${escapedPath}</p>
+                  <h1 class="mt-2 text-2xl font-semibold tracking-tight text-slate-100">${escapedTitle}</h1>
                 </div>
-                <div class="kb-model__meta flex flex-wrap items-center gap-3 text-sm text-slate-600">
-                  <span class="rounded-full border border-slate-200 bg-slate-50 px-3 py-1">${escapeHtml(extension.toUpperCase())} • ${formatBytes(stats?.size || 0)}</span>
-                  ${stats?.lastModified ? `<span class="rounded-full border border-slate-200 bg-slate-50 px-3 py-1">Updated ${formatDate(stats.lastModified)}</span>` : ''}
+                <div class="kb-model__meta flex flex-wrap items-center gap-3 text-sm text-slate-300">
+                  <span class="rounded-full border border-slate-700 bg-slate-900 px-3 py-1">${escapeHtml(extension.toUpperCase())} • ${formatBytes(stats?.size || 0)}</span>
+                  ${stats?.lastModified ? `<span class="rounded-full border border-slate-700 bg-slate-900 px-3 py-1">Updated ${formatDate(stats.lastModified)}</span>` : ''}
                   <a class="kb-model__download rounded-full bg-sky-500 px-4 py-2 font-semibold text-white transition hover:bg-sky-600" href="${modelUrl}" target="_blank" rel="noopener">Open original</a>
                 </div>
               </header>
-              <section class="kb-model__viewer rounded-3xl border border-slate-200 bg-slate-50 p-4">
-                <div class="kb-3d-viewer relative h-[28rem] w-full overflow-hidden rounded-2xl bg-slate-900" data-kb-3d-viewer data-model-url="${modelUrl}" data-model-format="${escapeHtml(extension)}">
+              <section class="kb-model__viewer min-h-0 flex-1">
+                <div class="kb-3d-viewer relative h-full w-full overflow-hidden bg-slate-900" data-kb-3d-viewer data-model-url="${modelUrl}" data-model-format="${escapeHtml(extension)}">
                   <div class="absolute inset-0 flex items-center justify-center text-sm text-slate-300" data-kb-3d-status>Loading 3D preview…</div>
+                  <div class="absolute right-3 top-3 z-10 flex gap-2" data-kb-3d-controls>
+                    <button type="button" class="rounded-full border border-slate-300 bg-white/90 px-3 py-1 text-xs font-medium text-slate-700" data-kb-3d-reset>Reset</button>
+                    <button type="button" class="rounded-full border border-slate-300 bg-white/90 px-3 py-1 text-xs font-medium text-slate-700" data-kb-3d-wireframe>Wireframe</button>
+                  </div>
                 </div>
               </section>
             </div>
@@ -73,7 +77,7 @@ export function threeDViewerPlugin(options: ThreeDViewerPluginOptions = {}): Kno
 
           return {
             href: friendlyHref,
-            targetBlank: false,
+            targetBlank: true,
             meta: `3D • ${entry.extension.toUpperCase().replace('.', '')}`,
             section: 'models',
             sectionTitle: options.sectionTitle || '3D Models'

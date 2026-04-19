@@ -114,6 +114,8 @@ const kb = new KnowledgeBase(options);
 
 You can extend the framework with plugins via `KnowledgeBaseOptions.plugins`.
 
+For scaffolded projects (`kb init`), plugin configuration lives in a separate `kb.plugins.json` file and is loaded automatically by `server.js`, `kb serve`, and `kb build`.
+
 ```typescript
 import express from 'express';
 import { KnowledgeBase, threeDViewerPlugin } from '@solovey1985/knowledge-base-framework';
@@ -138,6 +140,23 @@ Built-in plugin: `threeDViewerPlugin`
 - Renders `.stl` and `.obj` files as interactive 3D previews.
 - Adds a dedicated **3D Models** section in directory listings.
 - Keeps original model files downloadable via **Open original** link.
+
+Example `kb.plugins.json`:
+
+```json
+{
+  "plugins": [
+    {
+      "name": "threeDViewer",
+      "enabled": true,
+      "options": {
+        "extensions": [".stl", ".obj"],
+        "sectionTitle": "3D Models"
+      }
+    }
+  ]
+}
+```
 
 ### Static Site Builder
 

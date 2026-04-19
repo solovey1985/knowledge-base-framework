@@ -1,7 +1,7 @@
-type ThreeModule = typeof import('https://cdn.jsdelivr.net/npm/three@0.166.1/build/three.module.js');
-type OrbitControlsModule = typeof import('https://cdn.jsdelivr.net/npm/three@0.166.1/examples/jsm/controls/OrbitControls.js');
-type STLLoaderModule = typeof import('https://cdn.jsdelivr.net/npm/three@0.166.1/examples/jsm/loaders/STLLoader.js');
-type OBJLoaderModule = typeof import('https://cdn.jsdelivr.net/npm/three@0.166.1/examples/jsm/loaders/OBJLoader.js');
+type ThreeModule = typeof import('https://cdn.jsdelivr.net/npm/three@0.166.1/+esm');
+type OrbitControlsModule = typeof import('https://cdn.jsdelivr.net/npm/three@0.166.1/examples/jsm/controls/OrbitControls.js/+esm');
+type STLLoaderModule = typeof import('https://cdn.jsdelivr.net/npm/three@0.166.1/examples/jsm/loaders/STLLoader.js/+esm');
+type OBJLoaderModule = typeof import('https://cdn.jsdelivr.net/npm/three@0.166.1/examples/jsm/loaders/OBJLoader.js/+esm');
 
 type ThreeDeps = {
   THREE: ThreeModule;
@@ -15,10 +15,10 @@ let dependenciesLoader: Promise<ThreeDeps> | null = null;
 function loadDependencies(): Promise<ThreeDeps> {
   if (!dependenciesLoader) {
     dependenciesLoader = Promise.all([
-      import(/* @vite-ignore */ 'https://cdn.jsdelivr.net/npm/three@0.166.1/build/three.module.js'),
-      import(/* @vite-ignore */ 'https://cdn.jsdelivr.net/npm/three@0.166.1/examples/jsm/controls/OrbitControls.js'),
-      import(/* @vite-ignore */ 'https://cdn.jsdelivr.net/npm/three@0.166.1/examples/jsm/loaders/STLLoader.js'),
-      import(/* @vite-ignore */ 'https://cdn.jsdelivr.net/npm/three@0.166.1/examples/jsm/loaders/OBJLoader.js')
+      import(/* @vite-ignore */ 'https://cdn.jsdelivr.net/npm/three@0.166.1/+esm'),
+      import(/* @vite-ignore */ 'https://cdn.jsdelivr.net/npm/three@0.166.1/examples/jsm/controls/OrbitControls.js/+esm'),
+      import(/* @vite-ignore */ 'https://cdn.jsdelivr.net/npm/three@0.166.1/examples/jsm/loaders/STLLoader.js/+esm'),
+      import(/* @vite-ignore */ 'https://cdn.jsdelivr.net/npm/three@0.166.1/examples/jsm/loaders/OBJLoader.js/+esm')
     ]).then(([THREE, orbit, stl, obj]) => ({
       THREE,
       OrbitControls: orbit.OrbitControls,
@@ -60,7 +60,7 @@ async function bootViewer(host: HTMLElement): Promise<void> {
   const scene = new THREE.Scene();
   scene.background = new THREE.Color(0x0f172a);
 
-  const camera = new THREE.PerspectiveCamera(55, host.clientWidth / host.clientHeight, 0.1, 1000);
+  const camera = new THREE.PerspectiveCamera(55, host.clientWidth / host.clientHeight, 0.001, 1000000);
   camera.position.set(0, 1.6, 4);
 
   const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false });
@@ -105,7 +105,9 @@ async function bootViewer(host: HTMLElement): Promise<void> {
     root.add(object);
   }
 
-  fitModel(THREE, root, camera, controls);
+  const fit = fitModel(THREE, root, camera, controls);
+  adaptGrid(THREE, grid, fit.maxDim);
+  attachControls(host, root, fit.reset);
   clearStatus(host);
 
   const resizeObserver = new ResizeObserver(() => {
@@ -131,21 +133,109 @@ function fitModel(
   root: InstanceType<ThreeModule['Group']>,
   camera: InstanceType<ThreeModule['PerspectiveCamera']>,
   controls: InstanceType<OrbitControlsModule['OrbitControls']>
-): void {
+): { maxDim: number; reset: () => void } {
   const box = new THREE.Box3().setFromObject(root);
   if (box.isEmpty()) {
-    return;
+    const noop = () => {
+      // no-op
+    };
+    return { maxDim: 1, reset: noop };
   }
 
   const center = box.getCenter(new THREE.Vector3());
   const size = box.getSize(new THREE.Vector3());
   const maxDim = Math.max(size.x, size.y, size.z);
-  const fitHeightDistance = maxDim / (2 * Math.tan((camera.fov * Math.PI) / 360));
-  const distance = fitHeightDistance * 1.7;
+  root.position.sub(center);
 
-  camera.position.set(center.x + distance, center.y + distance * 0.5, center.z + distance);
-  controls.target.copy(center);
-  controls.update();
+  const minNear = Math.max(maxDim / 100000, 0.0001);
+  camera.near = minNear;
+  camera.far = Math.max(maxDim * 100, 1000);
+  camera.updateProjectionMatrix();
+
+  const fitHeightDistance = maxDim / Math.max(2 * Math.tan((camera.fov * Math.PI) / 360), 0.0001);
+  const distance = Math.max(fitHeightDistance * 1.6, maxDim * 1.2, 0.5);
+
+  const reset = () => {
+    camera.position.set(distance, distance * 0.45, distance);
+    controls.target.set(0, 0, 0);
+    controls.minDistance = Math.max(maxDim / 200, 0.001);
+    controls.maxDistance = Math.max(maxDim * 50, 5);
+    controls.update();
+  };
+
+  reset();
+  return { maxDim, reset };
+}
+
+function adaptGrid(
+  THREE: ThreeModule,
+  grid: InstanceType<ThreeModule['GridHelper']>,
+  maxDim: number
+): void {
+  const gridSize = Math.max(nextPowerOfTen(maxDim * 2), 1);
+  const divisions = clamp(Math.round(gridSize / Math.max(maxDim / 8, 0.1)), 8, 120);
+  const replacement = new THREE.GridHelper(gridSize, divisions, 0x475569, 0x1e293b);
+  grid.parent?.add(replacement);
+  grid.parent?.remove(grid);
+}
+
+function attachControls(
+  host: HTMLElement,
+  root: InstanceType<ThreeModule['Group']>,
+  resetView: () => void
+): void {
+  const resetBtn = host.querySelector<HTMLButtonElement>('[data-kb-3d-reset]');
+  const wireframeBtn = host.querySelector<HTMLButtonElement>('[data-kb-3d-wireframe]');
+
+  resetBtn?.addEventListener('click', () => {
+    resetView();
+  });
+
+  if (!wireframeBtn) {
+    return;
+  }
+
+  let wireframeEnabled = false;
+  wireframeBtn.addEventListener('click', () => {
+    wireframeEnabled = !wireframeEnabled;
+    setWireframe(root, wireframeEnabled);
+    wireframeBtn.textContent = wireframeEnabled ? 'Solid' : 'Wireframe';
+  });
+}
+
+function setWireframe(root: InstanceType<ThreeModule['Group']>, enabled: boolean): void {
+  root.traverse(node => {
+    const mesh = node as {
+      isMesh?: boolean;
+      material?: { wireframe?: boolean } | { wireframe?: boolean }[];
+    };
+    if (!mesh.isMesh || !mesh.material) {
+      return;
+    }
+
+    if (Array.isArray(mesh.material)) {
+      for (const material of mesh.material) {
+        if (typeof material.wireframe === 'boolean') {
+          material.wireframe = enabled;
+        }
+      }
+      return;
+    }
+
+    if (typeof mesh.material.wireframe === 'boolean') {
+      mesh.material.wireframe = enabled;
+    }
+  });
+}
+
+function nextPowerOfTen(value: number): number {
+  const safe = Math.max(value, 0.1);
+  const exponent = Math.ceil(Math.log10(safe));
+  return Math.pow(10, exponent);
+}
+
+function clamp(value: number, min: number, max: number): number {
+  return Math.max(min, Math.min(max, value));
 }
 
 function setStatus(host: HTMLElement, message: string): void {
