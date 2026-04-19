@@ -19,6 +19,7 @@ export interface PluginRenderContext {
   extension: string;
   fileService: FileService;
   readFile: (relativePath: string) => Promise<string>;
+  renderMarkdown: (markdown: string, currentPath?: string) => Promise<{ html: string; tableOfContents: import('./models').TocItem[] }>;
   getStats: (relativePath: string) => Promise<{ size: number; lastModified: Date } | null>;
   buildRawContentUrl: (relativePath: string) => string;
   buildFriendlyUrl: (relativePath: string, type: 'directory' | 'markdown' | 'text' | 'app') => string;
@@ -39,7 +40,8 @@ export interface PluginDirectoryContext {
 
 export interface ContentRendererPlugin {
   id: string;
-  extensions: string[];
+  extensions?: string[];
+  matches?: (requestPath: string, extension: string) => boolean;
   render: (context: PluginRenderContext) => Promise<RenderedContent | null>;
   renderDirectoryItem?: (context: PluginDirectoryContext) => PluginDirectoryRenderInfo | null;
 }

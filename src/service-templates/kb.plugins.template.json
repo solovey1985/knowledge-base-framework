@@ -10,6 +10,13 @@
         ],
         "sectionTitle": "3D Models"
       }
+    },
+    {
+      "name": "interviewPrep",
+      "enabled": false,
+      "options": {
+        "sectionTitle": "Interview Prep"
+      }
     }
   ]
 }

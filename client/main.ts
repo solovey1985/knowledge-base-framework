@@ -3,6 +3,7 @@ import { initNavigation } from './navigation';
 import { initSearch } from './search';
 import { initMermaid } from './mermaid';
 import { initLightbox } from './lightbox';
+import { initInterviewPrep } from './interviewPrep';
 import { initThreeViewer } from './threeViewer';
 
 const DATA_BASE_ATTR = 'data-base-url';
@@ -30,5 +31,6 @@ ready(() => {
   initSearch({ baseUrl });
   initMermaid();
   initLightbox();
+  initInterviewPrep();
   initThreeViewer();
 });

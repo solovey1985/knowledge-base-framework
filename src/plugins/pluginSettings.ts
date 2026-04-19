@@ -1,6 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import { KnowledgeBasePlugin } from '../core/plugins';
+import { InterviewPrepPluginOptions, interviewPrepPlugin } from './interviewPrepPlugin';
 import { ThreeDViewerPluginOptions, threeDViewerPlugin } from './threeDViewerPlugin';
 
 export interface PluginSettingsEntry {
@@ -37,6 +38,11 @@ export function resolvePluginsFromSettings(settings: PluginSettingsFile): Knowle
       continue;
     }
 
+    if (name === 'interview-prep') {
+      plugins.push(interviewPrepPlugin((entry.options || {}) as InterviewPrepPluginOptions));
+      continue;
+    }
+
     throw new Error(`Unknown plugin "${entry.name}" in plugin settings.`);
   }
 
@@ -49,5 +55,6 @@ function normalizePluginName(name: string): string {
     .toLowerCase()
     .replace(/[_\s]+/g, '-')
     .replace(/plugin$/g, '')
-    .replace(/three[d]?viewer/g, 'three-d-viewer');
+    .replace(/three[d]?viewer/g, 'three-d-viewer')
+    .replace(/interviewprep/g, 'interview-prep');
 }
