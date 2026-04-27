@@ -432,6 +432,7 @@ export class KnowledgeBase {
                     `);
                 } else {
                     const pluginDecoration = pluginDecorations.get(entry.path);
+                    const entryIcon = this.getDirectoryEntryIcon(entry);
                     const meta = entry.isDirectory
                         ? 'Folder'
                         : pluginDecoration?.meta
@@ -451,14 +452,15 @@ export class KnowledgeBase {
                                     ? this.buildFriendlyUrl(entry.path, 'text')
                                     : this.buildRawContentUrl(entry.path);
 
-                    const shouldOpenInNewTab = pluginDecoration?.targetBlank
-                        || (!entry.isDirectory && type === 'files');
+                    const shouldOpenInNewTab = pluginDecoration
+                        ? Boolean(pluginDecoration.targetBlank)
+                        : (!entry.isDirectory && type === 'files');
                     const targetAttr = shouldOpenInNewTab ? ' target="_blank" rel="noopener"' : '';
 
                     htmlParts.push(`
                         <div class="kb-dir__entry rounded-3xl border border-slate-200 bg-white p-4 shadow-lg shadow-slate-200/50 transition hover:border-sky-300 hover:bg-slate-50">
                             <a class="block" href="${href}"${targetAttr}>
-                                <span class="kb-dir__entry-name block font-medium text-slate-900">${name}</span>
+                                <span class="kb-dir__entry-name flex items-center gap-2 font-medium text-slate-900">${entryIcon}<span>${name}</span></span>
                             </a>
                             <span class="kb-dir__entry-meta mt-2 block text-sm text-slate-500">${meta}</span>
                         </div>
@@ -757,6 +759,38 @@ export class KnowledgeBase {
         }
 
         return this.buildRawContentUrl(entry.path);
+    }
+
+    private getDirectoryEntryIcon(entry: ContentItem): string {
+        if (entry.isDirectory) {
+            return '<span aria-hidden="true" class="inline-flex h-6 w-6 items-center justify-center rounded-lg border border-slate-200 bg-slate-50 text-slate-500">📁</span>';
+        }
+
+        if (entry.path.toLowerCase().endsWith('.interview.md')) {
+            return '<span aria-hidden="true" class="inline-flex h-6 w-6 items-center justify-center rounded-lg border border-sky-200 bg-sky-50 text-sky-700">?</span>';
+        }
+
+        if (entry.path.toLowerCase().endsWith('.concept.md')) {
+            return '<span aria-hidden="true" class="inline-flex h-6 w-6 items-center justify-center rounded-lg border border-violet-200 bg-violet-50 text-violet-700"><svg viewBox="0 0 24 24" class="h-4 w-4 fill-none stroke-current" stroke-width="1.8"><circle cx="12" cy="5" r="2.5" stroke-linecap="round" stroke-linejoin="round"/><circle cx="5" cy="19" r="2.5" stroke-linecap="round" stroke-linejoin="round"/><circle cx="19" cy="19" r="2.5" stroke-linecap="round" stroke-linejoin="round"/><path d="M10.2 6.9L6.8 16.3" stroke-linecap="round" stroke-linejoin="round"/><path d="M13.8 6.9l3.4 9.4" stroke-linecap="round" stroke-linejoin="round"/><path d="M7.5 19h9" stroke-linecap="round" stroke-linejoin="round"/></svg></span>';
+        }
+
+        if (entry.extension === '.md') {
+            return '<span aria-hidden="true" class="inline-flex h-6 w-6 items-center justify-center rounded-lg border border-slate-200 bg-slate-50 text-slate-500">📄</span>';
+        }
+
+        if (entry.extension === '.html') {
+            return '<span aria-hidden="true" class="inline-flex h-6 w-6 items-center justify-center rounded-lg border border-slate-200 bg-slate-50 text-slate-500">🌐</span>';
+        }
+
+        if (this.isTextPreviewExtension(entry.extension)) {
+            return '<span aria-hidden="true" class="inline-flex h-6 w-6 items-center justify-center rounded-lg border border-slate-200 bg-slate-50 text-slate-500">⌘</span>';
+        }
+
+        if (this.isImageExtension(entry.extension)) {
+            return '<span aria-hidden="true" class="inline-flex h-6 w-6 items-center justify-center rounded-lg border border-slate-200 bg-slate-50 text-slate-500">🖼</span>';
+        }
+
+        return '<span aria-hidden="true" class="inline-flex h-6 w-6 items-center justify-center rounded-lg border border-slate-200 bg-slate-50 text-slate-500">•</span>';
     }
 
     private isTextPreviewExtension(extension: string): boolean {
