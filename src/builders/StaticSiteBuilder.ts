@@ -181,10 +181,14 @@ export class StaticSiteBuilder {
       return;
     }
 
-    const indexFileName = this.searchIndexService.getIndexFileName();
-    const outputIndexPath = path.join(outputDir, indexFileName);
+    const publicIndexName = this.options.search?.indexUrlPath
+      || this.searchIndexService.getIndexFileName();
+    const outputIndexRelativePath = this.options.search?.indexFilePath
+      || publicIndexName;
+    const outputIndexPath = path.join(outputDir, outputIndexRelativePath);
+    const publicIndexPath = path.join(outputDir, publicIndexName);
 
-    const needsRebuild = await this.needsSearchRebuild(outputDir, indexFileName);
+    const needsRebuild = await this.needsSearchRebuild(outputDir, outputIndexRelativePath, publicIndexName);
     if (!needsRebuild) {
       console.log('🔎 Search index up to date, skipping rebuild.');
       return;
@@ -202,14 +206,30 @@ export class StaticSiteBuilder {
       index: payload.index,
       documents: payload.documents
     };
+    await fs.mkdir(path.dirname(outputIndexPath), { recursive: true });
     await fs.writeFile(outputIndexPath, JSON.stringify(outputPayload, null, 2), 'utf-8');
-    console.log(`  ✓ Search index written to ${indexFileName}`);
+
+    if (path.normalize(publicIndexPath) !== path.normalize(outputIndexPath)) {
+      await fs.mkdir(path.dirname(publicIndexPath), { recursive: true });
+      await fs.writeFile(publicIndexPath, JSON.stringify(outputPayload, null, 2), 'utf-8');
+      console.log(`  ✓ Search index written to ${outputIndexRelativePath} and ${publicIndexName}`);
+      return;
+    }
+
+    console.log(`  ✓ Search index written to ${outputIndexRelativePath}`);
   }
 
-  private async needsSearchRebuild(outputDir: string, indexFileName: string): Promise<boolean> {
-    const indexPath = path.join(outputDir, indexFileName);
+  private async needsSearchRebuild(outputDir: string, outputIndexRelativePath: string, publicIndexName: string): Promise<boolean> {
+    const outputIndexPath = path.join(outputDir, outputIndexRelativePath);
+    const publicIndexPath = path.join(outputDir, publicIndexName);
+
     try {
-      const indexStat = await fs.stat(indexPath);
+      const indexStat = await fs.stat(outputIndexPath);
+
+      if (path.normalize(outputIndexPath) !== path.normalize(publicIndexPath)) {
+        await fs.stat(publicIndexPath);
+      }
+
       const contentRoot = this.knowledgeBase.getFileService().getRootPath();
       const latestContent = await this.findLatestContentMtime(contentRoot);
       return latestContent > indexStat.mtime;

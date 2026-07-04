@@ -42,6 +42,7 @@ interface ParsedConceptBlock {
   related: string[];
   summary: string;
   details: string;
+  exampleLanguage: string;
   example: string;
   mnemonic: string;
   recall: string[];
@@ -164,6 +165,7 @@ async function parseConceptBlocks(body: string, context: PluginRenderContext): P
       related: getSectionList(sections.related),
       summary: getSectionText(sections.summary),
       details: getSectionText(sections.details),
+      exampleLanguage: getSectionText(sections.examplelanguage),
       example: getSectionText(sections.example),
       mnemonic: getSectionText(sections.mnemonic),
       recall: getSectionList(sections.recall)
@@ -191,7 +193,7 @@ function resolveRelations(blocks: ParsedConceptBlock[]): TechMemoryPayload[] {
     aliases: block.aliases,
     summaryHtml: block.summary ? inlineMarkdownToHtml(block.summary) : '',
     detailsHtml: block.details ? inlineMarkdownToHtml(block.details) : '',
-    exampleHtml: block.example ? formatExampleHtml(block.example) : '',
+    exampleHtml: block.example ? formatExampleHtml(block.example, block.exampleLanguage) : '',
     mnemonicHtml: block.mnemonic ? inlineMarkdownToHtml(block.mnemonic) : '',
     recallHtml: block.recall.map(item => inlineMarkdownToHtml(item)),
     parents: resolveRelationList(block.parents, index),
@@ -388,16 +390,18 @@ function inlineMarkdownToHtml(value: string): string {
   return html.replace(/\n\n+/g, '</p><p>').replace(/\n/g, '<br>');
 }
 
-function formatExampleHtml(value: string): string {
+function formatExampleHtml(value: string, language: string): string {
   const trimmed = value.trim();
   if (!trimmed) {
     return '';
   }
 
   const lines = trimmed.split(/\r?\n/);
-  const looksLikeCode = lines.length > 1 || /[;{}=>]/.test(trimmed);
+  const normalizedLanguage = (language || '').trim().toLowerCase();
+  const looksLikeCode = Boolean(normalizedLanguage) || lines.length > 1 || /[;{}=>]/.test(trimmed);
   if (looksLikeCode) {
-    return `<pre class="overflow-x-auto rounded-2xl bg-slate-950 p-4 text-sm text-slate-100"><code>${escapeHtml(trimmed)}</code></pre>`;
+    const className = normalizedLanguage ? ` class="language-${escapeHtml(normalizedLanguage)}"` : '';
+    return `<pre class="max-w-full overflow-x-auto rounded-2xl bg-slate-950 p-4 text-sm text-slate-100"><code${className}>${escapeHtml(trimmed)}</code></pre>`;
   }
 
   return `<p>${inlineMarkdownToHtml(trimmed)}</p>`;

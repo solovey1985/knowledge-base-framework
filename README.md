@@ -127,7 +127,9 @@ const kb = new KnowledgeBase({
   title: 'Engineering KB',
   plugins: [
     threeDViewerPlugin({
-      extensions: ['.stl', '.obj']
+      extensions: ['.stl', '.obj'],
+      backgroundColor: '#f8fafc',
+      modelRotation: { x: -90, y: 0, z: 0 }
     })
   ]
 });
@@ -139,6 +141,7 @@ Built-in plugin: `threeDViewerPlugin`
 
 - Renders `.stl` and `.obj` files as interactive 3D previews.
 - Adds a dedicated **3D Models** section in directory listings.
+- Supports viewer background color and model rotation configuration.
 - Keeps original model files downloadable via **Open original** link.
 
 Built-in plugin: `interviewPrepPlugin`

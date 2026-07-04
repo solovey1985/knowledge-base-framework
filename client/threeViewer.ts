@@ -10,6 +10,15 @@ type ThreeDeps = {
   OBJLoader: OBJLoaderModule['OBJLoader'];
 };
 
+type ModelRotation = {
+  x: number;
+  y: number;
+  z: number;
+};
+
+const DEFAULT_BACKGROUND_COLOR = '#ссс';
+const DEFAULT_MODEL_ROTATION: ModelRotation = { x: 0, y: 0, z: 0 };
+
 let dependenciesLoader: Promise<ThreeDeps> | null = null;
 
 function loadDependencies(): Promise<ThreeDeps> {
@@ -45,6 +54,8 @@ export function initThreeViewer(): void {
 async function bootViewer(host: HTMLElement): Promise<void> {
   const modelUrl = host.getAttribute('data-model-url') || '';
   const modelFormat = (host.getAttribute('data-model-format') || '').toLowerCase();
+  const backgroundColor = host.getAttribute('data-background-color') || DEFAULT_BACKGROUND_COLOR;
+  const modelRotation = parseModelRotation(host.getAttribute('data-model-rotation'));
   if (!modelUrl || !modelFormat) {
     setStatus(host, 'Model path is missing.');
     return;
@@ -58,7 +69,7 @@ async function bootViewer(host: HTMLElement): Promise<void> {
   const { THREE, OrbitControls, STLLoader, OBJLoader } = await loadDependencies();
 
   const scene = new THREE.Scene();
-  scene.background = new THREE.Color(0x0f172a);
+  scene.background = new THREE.Color(backgroundColor);
 
   const camera = new THREE.PerspectiveCamera(55, host.clientWidth / host.clientHeight, 0.001, 1000000);
   camera.position.set(0, 1.6, 4);
@@ -80,6 +91,11 @@ async function bootViewer(host: HTMLElement): Promise<void> {
   scene.add(grid);
 
   const root = new THREE.Group();
+  root.rotation.set(
+    THREE.MathUtils.degToRad(modelRotation.x),
+    THREE.MathUtils.degToRad(modelRotation.y),
+    THREE.MathUtils.degToRad(modelRotation.z)
+  );
   scene.add(root);
 
   if (modelFormat === 'stl') {
@@ -236,6 +252,19 @@ function nextPowerOfTen(value: number): number {
 
 function clamp(value: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, value));
+}
+
+function parseModelRotation(value: string | null): ModelRotation {
+  if (!value) {
+    return DEFAULT_MODEL_ROTATION;
+  }
+
+  const [x, y, z] = value.split(',').map(part => Number(part.trim()));
+  return {
+    x: Number.isFinite(x) ? x : DEFAULT_MODEL_ROTATION.x,
+    y: Number.isFinite(y) ? y : DEFAULT_MODEL_ROTATION.y,
+    z: Number.isFinite(z) ? z : DEFAULT_MODEL_ROTATION.z
+  };
 }
 
 function setStatus(host: HTMLElement, message: string): void {

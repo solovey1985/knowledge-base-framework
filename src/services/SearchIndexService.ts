@@ -8,6 +8,7 @@ export interface SearchIndexOptions {
   enabled?: boolean;
   indexFileName?: string;
   indexFilePath?: string;
+  indexUrlPath?: string;
   titleBoost?: number;
   bodyBoost?: number;
 }
@@ -44,6 +45,7 @@ export class SearchIndexService {
       enabled: options.enabled !== false,
       indexFileName: options.indexFileName || 'search-index.json',
       indexFilePath: options.indexFilePath || '.kb-search-index.json',
+      indexUrlPath: options.indexUrlPath || options.indexFileName || 'search-index.json',
       titleBoost: options.titleBoost ?? 10,
       bodyBoost: options.bodyBoost ?? 1
     };
@@ -62,16 +64,26 @@ export class SearchIndexService {
     return this.indexFilePath;
   }
 
+  getIndexUrlPath(): string {
+    return this.options.indexUrlPath;
+  }
+
   async needsRebuild(): Promise<boolean> {
     if (!this.options.enabled) {
       return false;
+    }
+
+    // In dynamic server mode, rebuild once per process start so a deployed but stale
+    // cached index file never wins purely because of checkout mtimes.
+    if (!this.isStaticSite && (!this.indexCache || !this.documentsCache)) {
+      return true;
     }
 
     try {
       const indexStat = await fs.stat(this.indexFilePath);
       const contentDir = this.fileService.getRootPath();
       const latestContent = await this.findLatestContentMtime(contentDir);
-      return latestContent > indexStat.mtime;
+      return latestContent >= indexStat.mtime;
     } catch {
       return true;
     }
@@ -129,6 +141,13 @@ export class SearchIndexService {
     }
 
     try {
+      if (this.indexCache && this.documentsCache) {
+        return {
+          index: this.indexCache.toJSON(),
+          documents: this.documentsCache
+        };
+      }
+
       const content = await fs.readFile(this.indexFilePath, 'utf-8');
       const payload = JSON.parse(content);
       return {

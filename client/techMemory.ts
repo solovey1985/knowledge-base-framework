@@ -29,8 +29,17 @@ interface TechMemoryPageState {
   items: Record<string, TechMemoryItemState>;
 }
 
+declare global {
+  interface Window {
+    hljs?: {
+      highlightElement?: (element: Element) => void;
+    };
+  }
+}
+
 const STORAGE_PREFIX = 'kb.tech-memory.';
 const HIGHLIGHT_CLASS = 'ring-2 ring-sky-300 ring-offset-4 ring-offset-slate-50';
+const DEFAULT_OPEN_SECTIONS = ['summary'];
 
 export function initTechMemory(): void {
   const progressRoot = document.querySelector<HTMLElement>('[data-kb-tech-memory-progress]');
@@ -105,6 +114,9 @@ function renderSummary(root: HTMLElement, payloads: TechMemoryPayload[], state: 
 
   root.querySelector<HTMLButtonElement>('[data-kb-tech-memory-mode]')?.addEventListener('click', () => {
     state.recallMode = !state.recallMode;
+    Object.keys(state.items).forEach(itemId => {
+      state.items[itemId].sections = getDefaultSections(Boolean(state.recallMode));
+    });
     onChange();
   });
 
@@ -116,21 +128,21 @@ function renderSummary(root: HTMLElement, payloads: TechMemoryPayload[], state: 
 }
 
 function renderItem(slot: HTMLElement, payload: TechMemoryPayload, index: number, state: TechMemoryPageState, onChange: () => void): void {
-  const itemState = state.items[payload.id] || { status: 'new', sections: {} };
+  const itemState = state.items[payload.id] || { status: 'new', sections: getDefaultSections(state.recallMode || false) };
   itemState.sections = itemState.sections || {};
   itemState.status = itemState.status || 'new';
   state.items[payload.id] = itemState;
 
   slot.innerHTML = buildConceptMarkup(payload, index, itemState, state.recallMode || false);
   bindActions(slot, payload, itemState, state, onChange);
+  highlightCode(slot);
 }
 
 function buildConceptMarkup(payload: TechMemoryPayload, index: number, itemState: TechMemoryItemState, recallMode: boolean): string {
   const statusBadge = renderStatusBadge(itemState.status || 'new');
-  const sectionNames: Array<keyof Required<TechMemoryItemState>['sections']> = ['summary', 'details', 'example', 'mnemonic', 'recall'];
 
   return `
-    <article id="concept-${payload.id}" class="kb-tech-memory-item mt-8 rounded-[2rem] border border-slate-200 bg-white p-6 shadow-xl shadow-slate-200/40" data-kb-tech-memory-card="${payload.id}">
+    <article id="concept-${payload.id}" class="kb-tech-memory-item mt-8 min-w-0 overflow-hidden rounded-[2rem] border border-slate-200 bg-white p-6 shadow-xl shadow-slate-200/40" data-kb-tech-memory-card="${payload.id}">
       <div class="flex flex-wrap items-start justify-between gap-4">
         <div>
           <p class="text-xs font-semibold uppercase tracking-[0.3em] text-sky-700">Concept ${index + 1}</p>
@@ -146,15 +158,11 @@ function buildConceptMarkup(payload: TechMemoryPayload, index: number, itemState
         ${renderRelationRow('Related', payload.related, 'violet')}
       </div>
 
-      <div class="mt-6 flex flex-wrap gap-2">
-        ${sectionNames.map(section => renderActionButton(section, itemState.sections?.[section] || false)).join('')}
-      </div>
-
-      <div class="mt-6 space-y-4">
-        ${renderPanel('summary', 'Summary', payload.summaryHtml, itemState.sections?.summary || false, 'slate', recallMode)}
-        ${renderPanel('details', 'Details', payload.detailsHtml, itemState.sections?.details || false, 'slate', recallMode)}
-        ${renderPanel('example', 'Example', payload.exampleHtml, itemState.sections?.example || false, 'slate', recallMode)}
-        ${renderPanel('mnemonic', 'Mnemonic', payload.mnemonicHtml, itemState.sections?.mnemonic || false, 'emerald', recallMode)}
+      <div class="mt-6 space-y-3 min-w-0" data-kb-tech-memory-sections>
+        ${renderDisclosurePanel('summary', 'Summary', payload.summaryHtml, itemState.sections?.summary || false, 'slate')}
+        ${renderDisclosurePanel('details', 'Details', payload.detailsHtml, itemState.sections?.details || false, 'slate')}
+        ${renderDisclosurePanel('example', 'Example', payload.exampleHtml, itemState.sections?.example || false, 'slate')}
+        ${renderDisclosurePanel('mnemonic', 'Mnemonic', payload.mnemonicHtml, itemState.sections?.mnemonic || false, 'emerald')}
         ${renderRecallPanel(payload.recallHtml, itemState.sections?.recall || false, recallMode)}
       </div>
 
@@ -199,24 +207,36 @@ function renderRelationRow(title: string, relations: TechMemoryRelation[], color
   `;
 }
 
-function renderActionButton(section: string, active: boolean): string {
-  return `<button type="button" data-kb-tech-memory-action="${section}" class="rounded-full border px-4 py-2 text-sm font-medium transition ${active ? 'border-sky-300 bg-sky-50 text-sky-700' : 'border-slate-300 bg-white text-slate-700 hover:border-sky-300 hover:text-sky-700'}">${active ? 'Hide' : 'Reveal'} ${section === 'recall' ? 'prompts' : section}</button>`;
-}
-
-function renderPanel(section: string, title: string, html: string, revealed: boolean, tone: 'slate' | 'emerald', recallMode: boolean): string {
+function renderDisclosurePanel(section: string, title: string, html: string, revealed: boolean, tone: 'slate' | 'emerald'): string {
   if (!html) {
     return '';
   }
 
-  const visible = revealed;
   const styles = tone === 'emerald'
-    ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
-    : 'border-slate-200 bg-slate-50 text-slate-500';
+    ? {
+        shell: 'border-emerald-200 bg-emerald-50',
+        accent: 'text-emerald-700',
+        contentBorder: 'border-emerald-200',
+        chip: 'border-emerald-200 bg-white text-emerald-700'
+      }
+    : {
+        shell: 'border-slate-200 bg-slate-50',
+        accent: 'text-slate-500',
+        contentBorder: 'border-slate-200',
+        chip: 'border-slate-200 bg-white text-slate-500'
+      };
 
   return `
-    <section data-kb-tech-memory-panel="${section}" class="${visible ? '' : 'hidden '}rounded-3xl border p-5 ${styles}">
-      <div class="text-xs font-semibold uppercase tracking-[0.2em]">${title}</div>
-      <div class="mt-3 text-sm leading-7 text-slate-700">${html}</div>
+    <section data-kb-tech-memory-panel="${section}" class="overflow-hidden rounded-3xl border ${styles.shell}">
+      <button type="button" data-kb-tech-memory-toggle="${section}" class="flex w-full items-center justify-between gap-4 px-5 py-4 text-left">
+        <span class="block text-xs font-semibold uppercase tracking-[0.2em] ${styles.accent}">${title}</span>
+        <span class="rounded-full border p-2 transition ${styles.chip} ${revealed ? 'rotate-180' : ''}">
+          <svg viewBox="0 0 20 20" class="h-4 w-4 fill-none stroke-current" stroke-width="1.8"><path d="M5 8l5 5 5-5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </span>
+      </button>
+      <div class="${revealed ? '' : 'hidden '}min-w-0 border-t px-5 py-4 text-sm leading-7 text-slate-700 ${styles.contentBorder}" data-kb-tech-memory-content="${section}">
+        <div class="min-w-0 overflow-x-hidden [&_pre]:max-w-full [&_pre]:overflow-x-auto [&_pre]:whitespace-pre [&_pre]:rounded-2xl [&_pre]:bg-slate-950 [&_pre]:p-4 [&_pre]:text-sm [&_pre]:text-slate-100 [&_code]:break-words">${html}</div>
+      </div>
     </section>
   `;
 }
@@ -228,19 +248,26 @@ function renderRecallPanel(items: string[], revealed: boolean, recallMode: boole
 
   const visible = revealed || recallMode;
   return `
-    <section data-kb-tech-memory-panel="recall" class="${visible ? '' : 'hidden '}rounded-3xl border border-amber-200 bg-amber-50 p-5">
-      <div class="text-xs font-semibold uppercase tracking-[0.2em] text-amber-700">Recall prompts</div>
-      <ul class="mt-3 list-disc space-y-2 pl-5 text-sm leading-7 text-slate-700">
-        ${items.map(item => `<li>${item}</li>`).join('')}
-      </ul>
+    <section data-kb-tech-memory-panel="recall" class="overflow-hidden rounded-3xl border border-amber-200 bg-amber-50">
+      <button type="button" data-kb-tech-memory-toggle="recall" class="flex w-full items-center justify-between gap-4 px-5 py-4 text-left">
+        <span class="block text-xs font-semibold uppercase tracking-[0.2em] text-amber-700">Recall prompts</span>
+        <span class="rounded-full border border-amber-200 bg-white p-2 text-amber-700 transition ${visible ? 'rotate-180' : ''}">
+          <svg viewBox="0 0 20 20" class="h-4 w-4 fill-none stroke-current" stroke-width="1.8"><path d="M5 8l5 5 5-5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </span>
+      </button>
+      <div class="${visible ? '' : 'hidden '}border-t border-amber-200 px-5 py-4 text-sm leading-7 text-slate-700" data-kb-tech-memory-content="recall">
+        <ul class="list-disc space-y-2 pl-5">
+          ${items.map(item => `<li>${item}</li>`).join('')}
+        </ul>
+      </div>
     </section>
   `;
 }
 
 function bindActions(slot: HTMLElement, payload: TechMemoryPayload, itemState: TechMemoryItemState, state: TechMemoryPageState, onChange: () => void): void {
-  slot.querySelectorAll<HTMLButtonElement>('[data-kb-tech-memory-action]').forEach(button => {
+  slot.querySelectorAll<HTMLButtonElement>('[data-kb-tech-memory-toggle]').forEach(button => {
     button.addEventListener('click', () => {
-      const section = button.getAttribute('data-kb-tech-memory-action') || '';
+      const section = button.getAttribute('data-kb-tech-memory-toggle') || '';
       itemState.sections = itemState.sections || {};
       itemState.sections[section] = !itemState.sections[section];
       onChange();
@@ -255,7 +282,7 @@ function bindActions(slot: HTMLElement, payload: TechMemoryPayload, itemState: T
   });
 
   slot.querySelector<HTMLButtonElement>('[data-kb-tech-memory-reset]')?.addEventListener('click', () => {
-    state.items[payload.id] = { status: 'new', sections: {} };
+    state.items[payload.id] = { status: 'new', sections: getDefaultSections(state.recallMode || false) };
     onChange();
   });
 
@@ -323,4 +350,18 @@ function escapeHtml(value: string): string {
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&#039;');
+}
+
+function getDefaultSections(recallMode: boolean): Record<string, boolean> {
+  if (recallMode) {
+    return {};
+  }
+
+  return Object.fromEntries(DEFAULT_OPEN_SECTIONS.map(section => [section, true]));
+}
+
+function highlightCode(root: HTMLElement): void {
+  root.querySelectorAll('pre code').forEach(element => {
+    window.hljs?.highlightElement?.(element);
+  });
 }

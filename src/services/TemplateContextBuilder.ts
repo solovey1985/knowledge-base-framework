@@ -32,7 +32,7 @@ export class TemplateContextBuilder {
       assets: this.getAssetContext(baseUrl),
       search: {
         enabled: this.options.search?.enabled !== false,
-        indexFileName: this.options.search?.indexFileName || 'search-index.json'
+        indexFileName: this.options.search?.indexUrlPath || this.options.search?.indexFileName || 'search-index.json'
       }
     };
   }

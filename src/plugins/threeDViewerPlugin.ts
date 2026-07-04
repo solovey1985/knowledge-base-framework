@@ -11,14 +11,24 @@ const MODEL_EXTENSIONS = new Set([
   '.gltf'
 ]);
 
+export interface ThreeDViewerRotationOptions {
+  x?: number;
+  y?: number;
+  z?: number;
+}
+
 export interface ThreeDViewerPluginOptions {
   extensions?: string[];
   sectionTitle?: string;
+  backgroundColor?: string;
+  modelRotation?: ThreeDViewerRotationOptions;
 }
 
 export function threeDViewerPlugin(options: ThreeDViewerPluginOptions = {}): KnowledgeBasePlugin {
   const configuredExtensions = (options.extensions || DEFAULT_EXTENSIONS)
     .map(extension => extension.toLowerCase());
+  const backgroundColor = options.backgroundColor || '#f8fafc';
+  const modelRotation = formatRotation(options.modelRotation);
 
   return {
     id: 'three-d-viewer',
@@ -47,7 +57,7 @@ export function threeDViewerPlugin(options: ThreeDViewerPluginOptions = {}): Kno
                 </div>
               </header>
               <section class="kb-model__viewer min-h-0 flex-1">
-                <div class="kb-3d-viewer relative h-full w-full overflow-hidden bg-slate-900" data-kb-3d-viewer data-model-url="${modelUrl}" data-model-format="${escapeHtml(extension)}">
+                <div class="kb-3d-viewer relative h-full w-full overflow-hidden bg-slate-50" data-kb-3d-viewer data-model-url="${modelUrl}" data-model-format="${escapeHtml(extension)}" data-background-color="${escapeHtml(backgroundColor)}" data-model-rotation="${modelRotation}">
                   <div class="absolute inset-0 flex items-center justify-center text-sm text-slate-300" data-kb-3d-status>Loading 3D preview…</div>
                   <div class="absolute right-3 top-3 z-10 flex gap-2" data-kb-3d-controls>
                     <button type="button" class="rounded-full border border-slate-300 bg-white/90 px-3 py-1 text-xs font-medium text-slate-700" data-kb-3d-reset>Reset</button>
@@ -98,6 +108,17 @@ function formatBytes(bytes: number): string {
 
 function formatDate(date: Date): string {
   return date.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
+}
+
+function formatRotation(rotation: ThreeDViewerRotationOptions = {}): string {
+  const x = finiteOrDefault(rotation.x, -90);
+  const y = finiteOrDefault(rotation.y, 0);
+  const z = finiteOrDefault(rotation.z, 0);
+  return `${x},${y},${z}`;
+}
+
+function finiteOrDefault(value: number | undefined, fallback: number): number {
+  return typeof value === 'number' && Number.isFinite(value) ? value : fallback;
 }
 
 function escapeHtml(value: string): string {

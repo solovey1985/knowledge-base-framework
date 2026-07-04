@@ -996,9 +996,9 @@ export class KnowledgeBase {
             return;
         }
 
-        const indexFileName = this.searchIndexService.getIndexFileName();
+        const indexUrlPath = this.searchIndexService.getIndexUrlPath();
 
-        app.get(`/${indexFileName}`, async (req: Request, res: Response) => {
+        app.get(`/${indexUrlPath.replace(/^\/+/, '')}`, async (req: Request, res: Response) => {
             try {
                 const payload = await this.searchIndexService.buildAndGetIndex();
                 if (!payload) {
