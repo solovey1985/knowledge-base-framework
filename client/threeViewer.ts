@@ -87,9 +87,6 @@ async function bootViewer(host: HTMLElement): Promise<void> {
   directional.position.set(3, 6, 4);
   scene.add(directional);
 
-  const grid = new THREE.GridHelper(20, 20, 0x475569, 0x1e293b);
-  scene.add(grid);
-
   const root = new THREE.Group();
   root.rotation.set(
     THREE.MathUtils.degToRad(modelRotation.x),
@@ -122,7 +119,6 @@ async function bootViewer(host: HTMLElement): Promise<void> {
   }
 
   const fit = fitModel(THREE, root, camera, controls);
-  adaptGrid(THREE, grid, fit.maxDim);
   attachControls(host, root, fit.reset);
   clearStatus(host);
 
