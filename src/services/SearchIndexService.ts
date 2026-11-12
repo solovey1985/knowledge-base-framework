@@ -1,6 +1,8 @@
 import * as fs from 'fs/promises';
 import * as path from 'path';
+import { createHash } from 'crypto';
 import lunr from 'lunr';
+import { parse as parseYaml } from 'yaml';
 import { KnowledgeBase } from '../core/KnowledgeBase';
 import { FileService } from './FileService';
 
@@ -25,13 +27,28 @@ interface SearchDocument {
   snippet: string;
 }
 
+/** What clients receive; the indexed body stays inside the Lunr index. */
+export interface PublicSearchDocument {
+  id: string;
+  title: string;
+  url: string;
+  snippet: string;
+}
+
+export interface SearchIndexPayload {
+  index: object;
+  documents: PublicSearchDocument[];
+}
+
 export class SearchIndexService {
   private knowledgeBase: KnowledgeBase;
   private fileService: FileService;
   private options: Required<SearchIndexOptions>;
   private indexFilePath: string;
   private indexCache?: lunr.Index;
-  private documentsCache?: SearchDocument[];
+  private documentsCache?: PublicSearchDocument[];
+  /** Paths, sizes and mtimes of the indexed Markdown; detects edits, deletions and renames. */
+  private builtSignature?: string;
   private baseUrl: string;
   private isStaticSite: boolean;
   private pendingBuild?: Promise<void>;
@@ -84,11 +101,14 @@ export class SearchIndexService {
       return true;
     }
 
+    const signature = await this.computeContentSignature();
+    if (this.builtSignature) {
+      return signature !== this.builtSignature;
+    }
+
     try {
-      const indexStat = await fs.stat(this.indexFilePath);
-      const contentDir = this.fileService.getRootPath();
-      const latestContent = await this.findLatestContentMtime(contentDir);
-      return latestContent >= indexStat.mtime;
+      const stored = JSON.parse(await fs.readFile(this.indexFilePath, 'utf-8'));
+      return stored?.meta?.signature !== signature;
     } catch {
       return true;
     }
@@ -108,6 +128,7 @@ export class SearchIndexService {
     }
 
     console.log('🔎 Building search index...');
+    const signature = await this.computeContentSignature();
     const documents = await this.collectSearchDocuments();
     const options = this.options;
     const index = lunr(function () {
@@ -121,17 +142,19 @@ export class SearchIndexService {
       documents.forEach(doc => this.add(doc));
     });
 
+    const publicDocuments: PublicSearchDocument[] = documents.map(doc => ({
+      id: doc.id,
+      title: doc.title,
+      url: doc.url,
+      snippet: doc.snippet
+    }));
     const payload = {
       index: index.toJSON(),
-      documents: documents.map(doc => ({
-        id: doc.id,
-        title: doc.title,
-        url: doc.url,
-        snippet: doc.snippet
-      })),
+      documents: publicDocuments,
       meta: {
         generated: new Date().toISOString(),
-        documentCount: documents.length
+        documentCount: documents.length,
+        signature
       }
     };
 
@@ -143,11 +166,12 @@ export class SearchIndexService {
     );
 
     this.indexCache = index;
-    this.documentsCache = documents;
+    this.documentsCache = publicDocuments;
+    this.builtSignature = signature;
     console.log(`  ✅ Search index built with ${documents.length} documents.`);
   }
 
-  async getIndexPayload(): Promise<{ index: object; documents: SearchDocument[] } | null> {
+  async getIndexPayload(): Promise<SearchIndexPayload | null> {
     if (!this.options.enabled) {
       return null;
     }
@@ -164,14 +188,19 @@ export class SearchIndexService {
       const payload = JSON.parse(content);
       return {
         index: payload.index,
-        documents: payload.documents
+        documents: (payload.documents || []).map((doc: PublicSearchDocument) => ({
+          id: doc.id,
+          title: doc.title,
+          url: doc.url,
+          snippet: doc.snippet
+        }))
       };
     } catch {
       return null;
     }
   }
 
-  async buildAndGetIndex(): Promise<{ index: object; documents: SearchDocument[] } | null> {
+  async buildAndGetIndex(): Promise<SearchIndexPayload | null> {
     if (await this.needsRebuild()) {
       await this.build();
     }
@@ -185,7 +214,7 @@ export class SearchIndexService {
     for (const filePath of markdownFiles) {
       // Search indexes authored Markdown, not page chrome or live plugin state.
       // Full page rendering repeats navigation scans and synchronous Git commands.
-      const markdown = await this.fileService.readFile(filePath);
+      const { metadata, body: markdown } = this.splitFrontMatter(await this.fileService.readFile(filePath));
       const rendered = await this.knowledgeBase.getMarkdownRenderer().render(markdown, filePath);
       const plainText = this.stripHtml(rendered.html);
       if (!plainText) {
@@ -194,7 +223,7 @@ export class SearchIndexService {
 
       documents.push({
         id: filePath,
-        title: markdown.match(/^#\s+(.+)$/m)?.[1]?.trim() || path.basename(filePath, '.md'),
+        title: metadata.title || markdown.match(/^#\s+(.+)$/m)?.[1]?.trim() || path.basename(filePath, '.md'),
         body: plainText,
         url: this.getDocumentUrl(filePath),
         snippet: plainText.slice(0, 280)
@@ -224,27 +253,32 @@ export class SearchIndexService {
     return files;
   }
 
-  private async findLatestContentMtime(dirPath: string): Promise<Date> {
-    let latest = new Date(0);
-
+  /** YAML front matter is metadata, not searchable body text; its title names the result. */
+  private splitFrontMatter(source: string): { metadata: { title?: string }; body: string } {
+    const match = /^\uFEFF?---\r?\n([\s\S]*?)\r?\n---[ \t]*(?:\r?\n|$)/.exec(source);
+    if (!match) {
+      return { metadata: {}, body: source };
+    }
+    let title: string | undefined;
     try {
-      const entries = await fs.readdir(dirPath, { withFileTypes: true });
-      for (const entry of entries) {
-        const fullPath = path.join(dirPath, entry.name);
-        if (entry.isDirectory()) {
-          if (entry.name === '.kb') continue;
-          const nested = await this.findLatestContentMtime(fullPath);
-          if (nested > latest) latest = nested;
-        } else if (entry.name.endsWith('.md')) {
-          const stat = await fs.stat(fullPath);
-          if (stat.mtime > latest) latest = stat.mtime;
-        }
+      const parsed = parseYaml(match[1]);
+      if (parsed && typeof parsed === 'object' && typeof (parsed as { title?: unknown }).title === 'string') {
+        title = (parsed as { title: string }).title.trim() || undefined;
       }
     } catch {
-      // ignore
+      // Invalid metadata must not hide the document from search.
     }
+    return { metadata: { title }, body: source.slice(match[0].length) };
+  }
 
-    return latest;
+  private async computeContentSignature(): Promise<string> {
+    const hash = createHash('sha1');
+    const files = (await this.collectMarkdownFiles()).sort();
+    for (const file of files) {
+      const stats = await this.fileService.getStats(file);
+      hash.update(`${file}\0${stats?.size ?? -1}\0${stats?.lastModified?.getTime() ?? 0}\n`);
+    }
+    return hash.digest('hex');
   }
 
   private getDocumentUrl(markdownPath: string): string {
