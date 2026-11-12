@@ -17,3 +17,20 @@
 .kb-button-danger { @apply border-red-700 bg-red-700 text-white enabled:hover:bg-red-800; }
 .kb-icon-button { @apply size-9 shrink-0 p-2; }
 .kb-icon { @apply inline-block size-4 shrink-0 align-middle; }
+
+/* Article typography. In the base layer so utility classes used by plugin pages still win. */
+@layer base {
+  .kb-article { line-height: 1.7; }
+  .kb-article h1 { font-size: 2rem; line-height: 1.2; font-weight: 600; margin: 0 0 1rem; }
+  .kb-article h2 { font-size: 1.5rem; line-height: 1.3; font-weight: 600; margin: 2rem 0 0.75rem; }
+  .kb-article h3 { font-size: 1.25rem; line-height: 1.35; font-weight: 600; margin: 1.5rem 0 0.5rem; }
+  .kb-article h4 { font-size: 1.05rem; font-weight: 600; margin: 1.25rem 0 0.5rem; }
+  .kb-article p { margin: 0 0 1rem; }
+  .kb-article ol { list-style: decimal; padding-left: 1.5rem; margin: 0 0 1rem; }
+  .kb-article blockquote { margin: 0 0 1rem; padding-left: 1rem; border-left: 3px solid #cbd5e1; color: #475569; }
+  .kb-article hr { margin: 2rem 0; border: 0; border-top: 1px solid #e2e8f0; }
+  .kb-article :not(pre) > code {
+    padding: 0.1rem 0.35rem; border-radius: 0.35rem; background: rgb(15 23 42 / 0.06);
+    font-family: 'JetBrains Mono Variable', 'JetBrains Mono', monospace; font-size: 0.9em;
+  }
+}

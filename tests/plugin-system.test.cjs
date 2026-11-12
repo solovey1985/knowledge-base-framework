@@ -135,3 +135,16 @@ test('checkProject reports problems per plugin without starting anything', async
   assert.match(checkProject({ configPath: broken.configPath, verbose: true }).errors[3], /wordsPerMinute must be an integer/);
   assert.match(checkProject({ configPath: path.join(broken.root, 'absent.json') }).errors[0], /No configuration file found/);
 });
+
+test('formulas pass through Markdown unchanged; prices are not formulas', async () => {
+  const { MarkdownRenderer } = require('../lib/services/MarkdownRenderer');
+  const render = async source => (await new MarkdownRenderer().render(source)).html;
+  const inline = await render('Mass $m_a * m_b$ and $a \\, b$ with `$code$`.');
+  assert.match(inline, /\$m_a \* m_b\$/);
+  assert.match(inline, /\$a \\, b\$/);
+  assert.match(inline, /<code>\$code\$<\/code>/);
+  const block = await render('$$\n\\begin{aligned} a &< b \\\\ c_1 &= d_2 \\end{aligned}\n$$\n\nAfter *text*.');
+  assert.match(block, /\$\$\n\\begin{aligned} a &amp;&lt; b \\\\ c_1 &amp;= d_2 \\end{aligned}\n\$\$/);
+  assert.match(block, /<em>text<\/em>/);
+  assert.match(await render('It costs $5 and **not** $10.'), /\$5 and <strong>not<\/strong> \$10/);
+});

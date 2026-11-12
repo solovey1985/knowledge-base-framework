@@ -7,11 +7,15 @@ const outputDir = path.resolve(import.meta.dirname, 'templates', 'default', 'ass
 
 export default defineConfig({
   root,
+  // Assets are served from /framework-assets, /assets or <baseUrl>/assets: every
+  // generated reference (lazy chunks, stylesheets, fonts) must be relative.
+  base: './',
   plugins: [tailwindcss()],
   build: {
     outDir: outputDir,
     emptyOutDir: true,
-    sourcemap: true,
+    // Bundled vendor libraries would add about 17 MB of maps to the package.
+    sourcemap: false,
     cssCodeSplit: true,
     rollupOptions: {
       input: {

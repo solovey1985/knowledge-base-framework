@@ -1,0 +1,1 @@
+import{n as e}from"./kb-chunk-Y2CYZVJY-chunk.js";import{t}from"./kb-d3-selection-chunk.js";var n=e((e,n)=>{let r;return n===`sandbox`&&(r=t(`#i`+e)),t(n===`sandbox`?r.nodes()[0].contentDocument.body:`body`).select(`[id="${e}"]`)},`getDiagramElement`);export{n as t};

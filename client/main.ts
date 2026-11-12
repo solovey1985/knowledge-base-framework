@@ -1,10 +1,16 @@
+// Fonts ship with the framework: no request leaves the site.
+import '@fontsource-variable/space-grotesk';
+import '@fontsource-variable/jetbrains-mono';
 import './styles/tailwind.css';
 import './styles/icons-core.css';
 import './styles/main.scss';
+// Code is highlighted on the server; the browser only needs the theme.
+import 'highlight.js/styles/github-dark.css';
 import { initNavigation } from './navigation';
 import { initSearch } from './search';
 import { initMermaid } from './mermaid';
 import { initLightbox } from './lightbox';
+import { initMath } from './math';
 
 const DATA_BASE_ATTR = 'data-base-url';
 
@@ -30,5 +36,6 @@ ready(() => {
   initNavigation({ baseUrl });
   initSearch({ baseUrl });
   initMermaid();
+  initMath();
   initLightbox();
 });

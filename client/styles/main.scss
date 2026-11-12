@@ -1,4 +1,3 @@
-@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap');
 
 :root {
   color-scheme: light;
@@ -19,7 +18,7 @@
 
 body {
   margin: 0;
-  font-family: 'Space Grotesk', 'Segoe UI', sans-serif;
+  font-family: 'Space Grotesk Variable', 'Space Grotesk', 'Segoe UI', sans-serif;
   background: linear-gradient(120deg, #f8fafc, #eef2ff);
   color: #0f172a;
   min-height: 100vh;
@@ -247,9 +246,15 @@ a {
 .kb-content h1,
 .kb-content h2,
 .kb-content h3 {
-  font-family: 'Space Grotesk', 'Segoe UI', sans-serif;
+  font-family: 'Space Grotesk Variable', 'Space Grotesk', 'Segoe UI', sans-serif;
   margin-top: 2rem;
   color: #0f172a;
+}
+
+// A heading is a link to itself; it must read as a heading, not as a link.
+.kb-article .header-anchor {
+  color: inherit;
+  text-decoration: none;
 }
 
 .kb-content pre {
@@ -257,7 +262,7 @@ a {
   color: #fefefe;
   padding: 1rem;
   border-radius: 0.9rem;
-  font-family: 'JetBrains Mono', monospace;
+  font-family: 'JetBrains Mono Variable', 'JetBrains Mono', monospace;
   overflow-x: auto;
 }
 

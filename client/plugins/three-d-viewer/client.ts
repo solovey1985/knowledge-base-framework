@@ -1,7 +1,7 @@
-type ThreeModule = typeof import('https://cdn.jsdelivr.net/npm/three@0.166.1/+esm');
-type OrbitControlsModule = typeof import('https://cdn.jsdelivr.net/npm/three@0.166.1/examples/jsm/controls/OrbitControls.js/+esm');
-type STLLoaderModule = typeof import('https://cdn.jsdelivr.net/npm/three@0.166.1/examples/jsm/loaders/STLLoader.js/+esm');
-type OBJLoaderModule = typeof import('https://cdn.jsdelivr.net/npm/three@0.166.1/examples/jsm/loaders/OBJLoader.js/+esm');
+type ThreeModule = typeof import('three');
+type OrbitControlsModule = typeof import('three/examples/jsm/controls/OrbitControls.js');
+type STLLoaderModule = typeof import('three/examples/jsm/loaders/STLLoader.js');
+type OBJLoaderModule = typeof import('three/examples/jsm/loaders/OBJLoader.js');
 
 const SUPPORTED_FORMATS = ['stl', 'obj', '3mf'];
 
@@ -25,11 +25,12 @@ let dependenciesLoader: Promise<ThreeDeps> | null = null;
 
 function loadDependencies(): Promise<ThreeDeps> {
   if (!dependenciesLoader) {
+    // Bundled with the framework; downloaded only by model pages.
     dependenciesLoader = Promise.all([
-      import(/* @vite-ignore */ 'https://cdn.jsdelivr.net/npm/three@0.166.1/+esm'),
-      import(/* @vite-ignore */ 'https://cdn.jsdelivr.net/npm/three@0.166.1/examples/jsm/controls/OrbitControls.js/+esm'),
-      import(/* @vite-ignore */ 'https://cdn.jsdelivr.net/npm/three@0.166.1/examples/jsm/loaders/STLLoader.js/+esm'),
-      import(/* @vite-ignore */ 'https://cdn.jsdelivr.net/npm/three@0.166.1/examples/jsm/loaders/OBJLoader.js/+esm')
+      import('three'),
+      import('three/examples/jsm/controls/OrbitControls.js'),
+      import('three/examples/jsm/loaders/STLLoader.js'),
+      import('three/examples/jsm/loaders/OBJLoader.js')
     ]).then(([THREE, orbit, stl, obj]) => ({
       THREE,
       OrbitControls: orbit.OrbitControls,
@@ -133,7 +134,7 @@ export async function bootViewer(host: HTMLElement, source: HTMLElement, signal:
 
     if (modelFormat === '3mf') {
       // Loaded on demand: 3MF needs a ZIP decoder that STL and OBJ pages should not download.
-      const { ThreeMFLoader } = await import(/* @vite-ignore */ 'https://cdn.jsdelivr.net/npm/three@0.166.1/examples/jsm/loaders/3MFLoader.js/+esm');
+      const { ThreeMFLoader } = await import('three/examples/jsm/loaders/3MFLoader.js');
       root.add(await new ThreeMFLoader().loadAsync(modelUrl));
     }
 
