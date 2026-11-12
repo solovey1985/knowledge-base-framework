@@ -30,7 +30,9 @@ export class TemplateContextBuilder {
       page: {
         title: content.title || this.options.title,
         description: content.description || this.options.description,
-        metadata: content.metadata || {}
+        metadata: content.metadata || {},
+        // isThreeDModel is the pre-2.0 spelling kept for custom templates.
+        fullscreen: content.metadata?.layout === 'fullscreen' || Boolean(content.metadata?.isThreeDModel)
       },
       content,
       navigation,
@@ -93,11 +95,17 @@ export class TemplateContextBuilder {
       const entry = plugin.clientEntry;
       const container = entry && /^data-[a-z0-9-]+$/.test(entry.marker)
         ? new RegExp(`<[^>]+\\s${entry.marker}(?=[\\s=>])`, 'i') : undefined;
-      if (!entry || !/^kb-plugin-[a-z-]+\.js$/.test(entry.file) || !container?.test(html)) return [];
-      if (entry.cssFile && /^kb-icons-[a-z-]+\.css$/.test(entry.cssFile)) {
-        css.push(`${assetBase}/${entry.cssFile}`);
+      if (!entry || !container?.test(html)) return [];
+      // A plugin with its own assets directory names files inside it; built-ins name framework assets.
+      const own = Boolean(plugin.assetsDir);
+      const base = own ? this.joinWithBase(this.options.baseUrl, `plugin-assets/${plugin.id}`) : assetBase;
+      const scriptName = own ? /^[\w.-]+\.m?js$/ : /^kb-plugin-[a-z-]+\.js$/;
+      const styleName = own ? /^[\w.-]+\.css$/ : /^kb-icons-[a-z-]+\.css$/;
+      if (!scriptName.test(entry.file) || entry.file.includes('..')) return [];
+      if (entry.cssFile && styleName.test(entry.cssFile) && !entry.cssFile.includes('..')) {
+        css.push(`${base}/${entry.cssFile}`);
       }
-      return [`${assetBase}/${entry.file}`];
+      return [`${base}/${entry.file}`];
     });
     js.push(...entries);
     return {

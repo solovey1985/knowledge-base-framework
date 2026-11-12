@@ -160,6 +160,11 @@ export class StaticSiteBuilder {
           await fs.copyFile(sourcePath, path.join(outputDir, assetName));
         }
       }
+      for (const plugin of this.options.plugins || []) {
+        if (plugin.assetsDir) {
+          await this.copyDirectory(plugin.assetsDir, path.join(outputDir, 'plugin-assets', plugin.id));
+        }
+      }
       console.log('  ✓ Framework assets copied');
     } catch (error) {
       console.warn('⚠️ Could not copy bundled assets:', error instanceof Error ? error.message : 'Unknown error');

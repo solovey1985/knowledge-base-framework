@@ -4,7 +4,7 @@ import * as fs from 'fs/promises';
 import { existsSync } from 'fs';
 import { spawnSync } from 'child_process';
 import frameworkPackage from '../../package.json';
-import { buildSite, startServer } from '../index';
+import { buildSite, checkProject, startServer } from '../index';
 import { ConfigError, loadConfigFile } from './configLoader';
 
 const templatesDir = path.join(__dirname, '..', 'service-templates');
@@ -75,6 +75,9 @@ async function main() {
             break;
         case 'build':
             await buildProject(args);
+            break;
+        case 'doctor':
+            doctorProject(args);
             break;
         case 'help':
         default:
@@ -287,6 +290,29 @@ async function buildProject(args: string[]): Promise<void> {
     }
 }
 
+/** Offline validation of configuration and plugins; exit code 1 when something must be fixed. */
+function doctorProject(args: string[]): void {
+    try {
+        const flags = parseFlags(args, ['config', 'plugins', 'private', 'verbose'], ['private', 'verbose']);
+        const check = checkProject({
+            configPath: flags.config,
+            pluginsConfigPath: flags.plugins,
+            requireAuthentication: flags.private === 'true',
+            verbose: flags.verbose === 'true'
+        });
+        console.log(`Plugins: ${check.plugins.length ? check.plugins.join(', ') : '(none)'}`);
+        for (const warning of check.warnings) console.log(`⚠ ${warning}`);
+        for (const error of check.errors) console.error(`❌ ${error}`);
+        if (check.errors.length) {
+            process.exitCode = 1;
+            return;
+        }
+        console.log('✅ Configuration and plugins are valid. Network access, credentials and hosting are not checked.');
+    } catch (error) {
+        handleConfigError(error);
+    }
+}
+
 /** --name value and --name=value; unknown flags are rejected so typos are not ignored. */
 function parseFlags(args: string[], allowed: string[], booleans: string[] = []): Record<string, string | undefined> {
     const flags: Record<string, string | undefined> = {};
@@ -331,6 +357,7 @@ Commands:
     update          Refresh framework-managed files; --dry-run previews, --force replaces changed files
     serve           Start the server
     build           Build static site
+    doctor          Validate configuration and plugins offline; --private requires authentication
     help            Show this help message
 
 Options:
@@ -338,6 +365,7 @@ Options:
     --plugins <file>    Plugin settings file (serve, build). Overrides KB_PLUGINS_CONFIG
     --port <number>     Port (serve). Overrides PORT and server.port
     --host <address>    Bind address (serve). Overrides HOST and server.host
+    --verbose           Show plugin error messages (doctor)
 
 Examples:
     kb init my-docs

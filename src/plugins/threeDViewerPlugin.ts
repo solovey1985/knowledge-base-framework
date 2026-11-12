@@ -76,6 +76,7 @@ export function threeDViewerPlugin(options: ThreeDViewerPluginOptions = {}): Kno
             html,
             `${displayName} 3D preview`,
             {
+              layout: 'fullscreen',
               isThreeDModel: true,
               modelFormat: extension,
               modelUrl

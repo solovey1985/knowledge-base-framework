@@ -33,6 +33,7 @@ export function workManagerPlugin(options: WorkManagerOptions): KnowledgeBasePlu
   return {
     id: 'work-manager',
     clientEntry: { file: 'kb-plugin-work-manager.js', cssFile: 'kb-icons-work-manager.css', marker: 'data-work-manager' }, requiresAuthentication: true,
+    requiresStorage: [providerId],
     contentRenderers: [{
       id: 'work-manager-page',
       matches: requestPath => requestPath.endsWith(WORK_MANAGER_SUFFIX),

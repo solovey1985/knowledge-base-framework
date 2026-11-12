@@ -2,7 +2,7 @@ import * as fs from 'fs/promises';
 import * as path from 'path';
 import { createHash } from 'crypto';
 import lunr from 'lunr';
-import { parse as parseYaml } from 'yaml';
+import { splitFrontMatter } from '../core/frontMatter';
 import { KnowledgeBase } from '../core/KnowledgeBase';
 import { FileService } from './FileService';
 
@@ -214,7 +214,8 @@ export class SearchIndexService {
     for (const filePath of markdownFiles) {
       // Search indexes authored Markdown, not page chrome or live plugin state.
       // Full page rendering repeats navigation scans and synchronous Git commands.
-      const { metadata, body: markdown } = this.splitFrontMatter(await this.fileService.readFile(filePath));
+      const { data, body: markdown } = splitFrontMatter(await this.fileService.readFile(filePath));
+      const frontMatterTitle = typeof data.title === 'string' && data.title.trim() ? data.title.trim() : undefined;
       const rendered = await this.knowledgeBase.getMarkdownRenderer().render(markdown, filePath);
       const plainText = this.stripHtml(rendered.html);
       if (!plainText) {
@@ -223,11 +224,37 @@ export class SearchIndexService {
 
       documents.push({
         id: filePath,
-        title: metadata.title || markdown.match(/^#\s+(.+)$/m)?.[1]?.trim() || path.basename(filePath, '.md'),
+        title: frontMatterTitle || markdown.match(/^#\s+(.+)$/m)?.[1]?.trim() || path.basename(filePath, '.md'),
         body: plainText,
         url: this.getDocumentUrl(filePath),
         snippet: plainText.slice(0, 280)
       });
+    }
+
+    // Plugins may add documents (for example entities they store outside Markdown).
+    const kbOptions = this.knowledgeBase.getOptions();
+    for (const plugin of kbOptions.plugins || []) {
+      if (!plugin.searchDocuments) continue;
+      try {
+        const contributed = await plugin.searchDocuments({
+          fileService: this.fileService,
+          isStaticSite: this.isStaticSite,
+          buildDocumentUrl: relativePath => this.knowledgeBase.buildDocumentUrl(relativePath)
+        });
+        for (const doc of contributed || []) {
+          if (!doc || !doc.id || !doc.url) continue;
+          const body = String(doc.body || '');
+          documents.push({
+            id: `${plugin.id}:${doc.id}`,
+            title: String(doc.title || doc.id),
+            body,
+            url: doc.url,
+            snippet: doc.snippet || body.slice(0, 280)
+          });
+        }
+      } catch (error) {
+        console.warn(`⚠️ Plugin "${plugin.id}" could not contribute search documents:`, error instanceof Error ? error.message : error);
+      }
     }
 
     return documents;
@@ -251,24 +278,6 @@ export class SearchIndexService {
     }
 
     return files;
-  }
-
-  /** YAML front matter is metadata, not searchable body text; its title names the result. */
-  private splitFrontMatter(source: string): { metadata: { title?: string }; body: string } {
-    const match = /^\uFEFF?---\r?\n([\s\S]*?)\r?\n---[ \t]*(?:\r?\n|$)/.exec(source);
-    if (!match) {
-      return { metadata: {}, body: source };
-    }
-    let title: string | undefined;
-    try {
-      const parsed = parseYaml(match[1]);
-      if (parsed && typeof parsed === 'object' && typeof (parsed as { title?: unknown }).title === 'string') {
-        title = (parsed as { title: string }).title.trim() || undefined;
-      }
-    } catch {
-      // Invalid metadata must not hide the document from search.
-    }
-    return { metadata: { title }, body: source.slice(match[0].length) };
   }
 
   private async computeContentSignature(): Promise<string> {

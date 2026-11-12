@@ -1,4 +1,4 @@
-import { marked } from 'marked';
+import { Marked, MarkedExtension, Renderer } from 'marked';
 import hljs from 'highlight.js';
 import path from 'path';
 import { TocItem } from '../core/models';
@@ -7,6 +7,8 @@ export interface MarkdownRendererOptions {
   isStaticSite?: boolean;
   baseUrl?: string;
   currentPath?: string;
+  /** marked extensions contributed by plugins. */
+  extensions?: MarkedExtension[];
 }
 
 /**
@@ -17,23 +19,20 @@ export class MarkdownRenderer {
   private baseUrl: string;
   private currentPath: string;
   private headers: TocItem[] = [];
+  /** Own instance: plugin extensions must not leak into other KnowledgeBase instances. */
+  private marked: Marked;
 
   constructor(options: MarkdownRendererOptions = {}) {
     this.isStaticSite = options.isStaticSite || false;
     this.baseUrl = options.baseUrl || '';
     this.currentPath = options.currentPath || '';
-    this.configureMarked();
-  }
-
-  /**
-   * Configure marked with syntax highlighting and custom renderers
-   */
-  private configureMarked(): void {
-    // Configure marked options
-    marked.setOptions({
+    this.marked = new Marked({
       breaks: false,  // Disable automatic line breaks to prevent math splitting
-      gfm: true,
+      gfm: true
     });
+    for (const extension of options.extensions || []) {
+      this.marked.use(extension);
+    }
   }
 
   /**
@@ -101,7 +100,7 @@ export class MarkdownRenderer {
       this.headers = [];
       
       // Render markdown content
-      const html = await marked(markdown, { renderer: this.createRenderer(currentPath) });
+      const html = await this.marked.parse(markdown, { renderer: this.createRenderer(currentPath) });
       
       // Build hierarchical TOC
       const tableOfContents = this.buildTocHierarchy([...this.headers]);
@@ -146,7 +145,7 @@ export class MarkdownRenderer {
   }
 
   private createRenderer(currentPath: string): any {
-    const renderer = new marked.Renderer();
+    const renderer = new Renderer();
     const currentMarkdownPath = this.normalizePath(currentPath);
     const currentDirectory = currentMarkdownPath ? path.posix.dirname(currentMarkdownPath) : '';
 

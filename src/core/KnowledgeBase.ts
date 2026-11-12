@@ -13,6 +13,7 @@ import { TemplateContextBuilder } from '../services/TemplateContextBuilder';
 import { SearchIndexService } from '../services/SearchIndexService';
 import { PluginManager } from '../services/PluginManager';
 import { StorageRegistry } from './storage';
+import { frontMatterTags, splitFrontMatter } from './frontMatter';
 
 const IMAGE_EXTENSIONS = new Set(['.png', '.jpg', '.jpeg', '.gif', '.webp', '.bmp', '.svg']);
 const TEXT_PREVIEW_EXTENSIONS = new Set([
@@ -46,12 +47,18 @@ export class KnowledgeBase {
             throw new Error('This plugin requires authentication.');
         }
         if (options.isStaticSite && authentication.length) throw new Error('Authentication requires a server; static export would expose private content.');
+        for (const plugin of options.plugins || []) {
+            if (plugin.assetsDir && (!/^[a-z0-9][a-z0-9-]*$/.test(plugin.id) || !path.isAbsolute(plugin.assetsDir))) {
+                throw new Error(`Plugin "${plugin.id}" serves assets: its id must use lowercase letters, digits and hyphens, and assetsDir must be absolute.`);
+            }
+        }
         this.options = this.mergeWithDefaults(options);
         this.fileService = new FileService(this.options.contentRootPath);
         this.navigationService = new NavigationService(this.fileService);
         this.markdownRenderer = new MarkdownRenderer({
             isStaticSite: this.options.isStaticSite || false,
-            baseUrl: this.options.baseUrl || ''
+            baseUrl: this.options.baseUrl || '',
+            extensions: (this.options.plugins || []).flatMap(plugin => plugin.markdownExtensions || [])
         });
         this.gitService = new GitService();
         this.pluginManager = new PluginManager(this.options.plugins || []);
@@ -134,6 +141,12 @@ export class KnowledgeBase {
         for (const plugin of this.options.plugins || []) plugin.setupServer?.(app, {
             storage: this.storage, contentRootPath: this.options.contentRootPath,
         });
+        // After authentication: a private site's plugin assets are private too.
+        for (const plugin of this.options.plugins || []) {
+            if (plugin.assetsDir) {
+                app.use(`/plugin-assets/${plugin.id}`, express.static(plugin.assetsDir, { fallthrough: false }));
+            }
+        }
         app.use(express.urlencoded({ extended: false }));
 
         // Unicode path normalization middleware
@@ -192,7 +205,7 @@ export class KnowledgeBase {
 
         // Friendly HTML routes
         app.get('*', async (req: Request, res: Response, next: NextFunction) => {
-            if (req.path.startsWith('/content') || req.path.startsWith('/assets') || req.path.startsWith('/framework-assets')) {
+            if (req.path.startsWith('/content') || req.path.startsWith('/assets') || req.path.startsWith('/framework-assets') || req.path.startsWith('/plugin-assets')) {
                 return next();
             }
 
@@ -466,16 +479,18 @@ export class KnowledgeBase {
     }
 
     private async renderMarkdownFile(targetPath: string, isIndex: boolean): Promise<RenderedContent> {
-        const markdownContent = await this.fileService.readFile(targetPath);
+        // Front matter is metadata: it names and describes the page but is not rendered as text.
+        const { data: frontMatter, body: markdownContent } = splitFrontMatter(await this.fileService.readFile(targetPath));
         const rendered = await this.markdownRenderer.render(markdownContent, targetPath);
         const navigation = await this.navigationService.generateNavigation(this.options.navigation!, targetPath);
         const breadcrumbs = await this.buildBreadcrumbs(targetPath);
         const gitInfo = this.gitService.getCommitInfoForDisplay();
+        const text = (value: unknown) => typeof value === 'string' && value.trim() ? value.trim() : undefined;
 
-        return {
+        let page: RenderedContent = {
             htmlContent: rendered.html,
-            title: this.extractTitle(markdownContent) || this.options.title!,
-            description: this.options.description!,
+            title: text(frontMatter.title) || this.extractTitle(markdownContent) || this.options.title!,
+            description: text(frontMatter.description) || this.options.description!,
             navigation: this.navigationService.filterNavigation(navigation, this.options.navigation!.excludePatterns),
             breadcrumbs,
             tableOfContents: rendered.tableOfContents,
@@ -483,9 +498,29 @@ export class KnowledgeBase {
                 path: targetPath,
                 isIndex,
                 gitInfo,
+                frontMatter,
+                tags: frontMatterTags(frontMatter),
                 lastModified: (await this.fileService.getStats(targetPath))?.lastModified
             }
         };
+
+        for (const plugin of this.options.plugins || []) {
+            if (!plugin.transformPage) continue;
+            page = await plugin.transformPage(page, {
+                requestPath: targetPath.split('\\').join('/'),
+                markdown: markdownContent,
+                frontMatter,
+                fileService: this.fileService,
+                isStaticSite: this.options.isStaticSite || false,
+                buildDocumentUrl: (relativePath: string) => this.buildDocumentUrl(relativePath)
+            }) || page;
+        }
+        return page;
+    }
+
+    /** Link to a Markdown document or other content file, valid in server and static mode. */
+    buildDocumentUrl(relativePath: string): string {
+        return /\.md$/i.test(relativePath) ? this.buildFriendlyUrl(relativePath, 'markdown') : this.buildFileRouteUrl(relativePath);
     }
 
     private async renderTextFile(targetPath: string): Promise<RenderedContent> {

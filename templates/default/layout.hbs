@@ -31,8 +31,8 @@
     });
   </script>
 </head>
-<body data-base-url="{{site.baseUrl}}" data-kb-search-index="{{search.indexFileName}}" class="min-h-screen {{#if page.metadata.isThreeDModel}}overflow-hidden bg-slate-950 text-slate-100{{else}}bg-slate-50 text-slate-900{{/if}} font-sans">
-  {{#if page.metadata.isThreeDModel}}
+<body data-base-url="{{site.baseUrl}}" data-kb-search-index="{{search.indexFileName}}" class="min-h-screen {{#if page.fullscreen}}overflow-hidden bg-slate-950 text-slate-100{{else}}bg-slate-50 text-slate-900{{/if}} font-sans">
+  {{#if page.fullscreen}}
     <main class="h-screen w-screen">
       {{{content.htmlContent}}}
     </main>

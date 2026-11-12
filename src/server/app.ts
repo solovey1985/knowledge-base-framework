@@ -6,7 +6,7 @@ import { StaticSiteBuilder } from '../builders/StaticSiteBuilder';
 import { KnowledgeBaseOptions } from '../core/interfaces';
 import { KnowledgeBase } from '../core/KnowledgeBase';
 import { KnowledgeBasePlugin } from '../core/plugins';
-import { loadPluginsFromFile } from '../plugins/pluginSettings';
+import { loadPluginsFromFile, PluginSettingsFile, resolvePluginEntries } from '../plugins/pluginSettings';
 
 const CONFIG_CANDIDATES = ['kb.config.json', 'knowledge-base.config.json', 'config.json'];
 
@@ -117,6 +117,107 @@ export async function buildSite(options: ProjectOptions = {}): Promise<void> {
   const { config, plugins } = resolveProject(options);
   const builder = new StaticSiteBuilder({ ...config, plugins, isStaticSite: true });
   await builder.build();
+}
+
+export interface CheckProjectOptions extends Omit<ProjectOptions, 'plugins'> {
+  /** Fail when no authentication plugin is enabled (a deployment that must be private). */
+  requireAuthentication?: boolean;
+  /** Include the plugins' own error messages. Off by default: they may quote configuration values. */
+  verbose?: boolean;
+}
+
+export interface ProjectCheck {
+  errors: string[];
+  warnings: string[];
+  /** Enabled plugin ids, in load order. */
+  plugins: string[];
+}
+
+/**
+ * Validates configuration, plugin options and the relations between plugins without
+ * starting a server and without network requests. Never throws for a project problem.
+ */
+export function checkProject(options: CheckProjectOptions = {}): ProjectCheck {
+  const result: ProjectCheck = { errors: [], warnings: [], plugins: [] };
+  let project: ResolvedProject;
+  try {
+    project = resolveProject({ ...options, plugins: [] });
+  } catch (error) {
+    result.errors.push(error instanceof Error ? error.message : String(error));
+    return result;
+  }
+
+  const { config, configDir } = project;
+  if (!existsSync(config.contentRootPath)) {
+    result.errors.push(`Content directory does not exist: ${config.contentRootPath}`);
+  }
+  if (config.auth?.enabled) {
+    result.errors.push('The "auth" block is no longer supported. Enable the passwordAuth plugin instead.');
+  }
+
+  const settingsPath = path.resolve(
+    configDir,
+    options.pluginsConfigPath || process.env.KB_PLUGINS_CONFIG || config.pluginsConfigPath || './kb.plugins.json'
+  );
+  let settings: PluginSettingsFile = {};
+  if (!existsSync(settingsPath)) {
+    result.warnings.push(`No plugin settings file at ${settingsPath}; running without plugins.`);
+  } else {
+    try {
+      settings = JSON.parse(readFileSync(settingsPath, 'utf-8')) as PluginSettingsFile;
+      if (!settings || typeof settings !== 'object' || (settings.plugins !== undefined && !Array.isArray(settings.plugins))) {
+        throw new Error('"plugins" must be an array');
+      }
+    } catch (error) {
+      result.errors.push(`Invalid plugin settings file ${settingsPath}: ${error instanceof Error ? error.message : error}`);
+      return result;
+    }
+  }
+
+  const plugins: KnowledgeBasePlugin[] = [];
+  for (const resolution of resolvePluginEntries(settings, path.dirname(settingsPath))) {
+    if (resolution.plugin) {
+      plugins.push(resolution.plugin);
+      result.plugins.push(resolution.plugin.id);
+      continue;
+    }
+    const message = resolution.error?.message || '';
+    const structural = /^(Unknown plugin|Cannot load plugin module|Plugin module|Plugin "module")/.test(message);
+    result.errors.push(structural || options.verbose
+      ? message
+      : `Plugin "${resolution.label}": invalid options or missing/invalid environment variables (use --verbose for the plugin's message).`);
+  }
+
+  for (const plugin of plugins) {
+    if (plugin.assetsDir && !existsSync(plugin.assetsDir)) {
+      result.errors.push(`Plugin "${plugin.id}": assets directory does not exist: ${plugin.assetsDir}`);
+    } else if (plugin.assetsDir && plugin.clientEntry && !existsSync(path.join(plugin.assetsDir, plugin.clientEntry.file))) {
+      result.errors.push(`Plugin "${plugin.id}": client entry ${plugin.clientEntry.file} is missing from its assets directory.`);
+    }
+  }
+
+  if (options.requireAuthentication && !plugins.some(plugin => plugin.authentication)) {
+    result.errors.push('This deployment must be private, but no authentication plugin is enabled.');
+  }
+
+  if (!result.errors.length) {
+    try {
+      // The constructor checks relations: one authentication provider, plugins that need
+      // authentication or a storage provider, asset ids.
+      const knowledgeBase = new KnowledgeBase({ ...config, plugins });
+      // The server reports a missing provider only when routes are registered; say it here, by name.
+      for (const plugin of plugins) {
+        for (const providerId of plugin.requiresStorage || []) {
+          if (!knowledgeBase.storage.ids().includes(providerId)) {
+            result.errors.push(`Plugin "${plugin.id}" needs the storage provider "${providerId}", which no enabled plugin provides.`);
+          }
+        }
+      }
+    } catch (error) {
+      result.errors.push(error instanceof Error ? error.message : String(error));
+    }
+  }
+  return result;
 }
 
 function resolveFrameworkAssetsDir(fallbackDir: string): string {
