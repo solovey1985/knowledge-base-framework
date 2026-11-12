@@ -41,3 +41,9 @@ The generated icon CSS scans only icon candidates, preventing duplicated base ut
 NavigationService carries explicit folder identity, including empty and depth-limited folders. The template renders a separate labelled chevron only when children exist. Folder links remain independent. Folders start collapsed, then saved expansion state and the current page's ancestors are revealed. First expansion exposes direct children only; previously expanded descendants retain their state. Enter/Space toggle the focused button; Left/Right explicitly collapse/expand. Bulk controls remain available. The mobile drawer uses the same tree and supports Escape.
 
 2026-11-06 acceptance used an isolated temporary project, not Second Brain. Verified single-level expansion, nested folders, folder-link navigation, bulk controls, keyboard arrows, desktop icons and the mobile drawer at 390px. Work Manager used a fixture API, not Google Drive. Other plugin icon assets are covered by build checks; this does not imply fresh WebGL or all-plugin browser acceptance.
+
+## Bundled libraries (rc.18)
+
+Mermaid, KaTeX (with its fonts), Three.js and the interface fonts are npm dev dependencies bundled by Vite into `templates/default/assets`. Pages request them as lazy chunks only when they contain a diagram, a formula or a 3D model; nothing is loaded from a CDN, so a site works offline and under a strict Content-Security-Policy. Vite uses `base: './'`: every generated reference is relative, because assets are served from `/framework-assets`, `/assets` or `<baseUrl>/assets`. highlight.js runs on the server only; the browser receives the theme stylesheet. Source maps are not shipped.
+
+A plugin may declare `clientEntries` in addition to `clientEntry` when it has more than one kind of page (Work Manager: the project editor and the overview). Third-party plugins ship their own files through `assetsDir`; see [PLUGIN_AUTHORING.md](PLUGIN_AUTHORING.md).

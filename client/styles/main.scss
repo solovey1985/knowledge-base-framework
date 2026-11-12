@@ -251,6 +251,51 @@ a {
   color: #0f172a;
 }
 
+// notes plugin: wiki links, tags and backlinks.
+.kb-wikilink--missing {
+  color: #b45309;
+  border-bottom: 1px dashed currentColor;
+  cursor: help;
+}
+
+.kb-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: 2rem;
+}
+
+.kb-tag {
+  padding: 0.1rem 0.6rem;
+  border-radius: 999px;
+  background: rgba(15, 23, 42, 0.06);
+  color: #334155;
+  font-size: 0.85rem;
+  text-decoration: none;
+}
+
+a.kb-tag:hover {
+  background: rgba(37, 99, 235, 0.12);
+}
+
+.kb-backlinks {
+  margin-top: 2.5rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--kb-border);
+}
+
+.kb-backlinks h2 {
+  font-size: 1rem;
+  margin: 0 0 0.5rem;
+  color: #475569;
+}
+
+.kb-tag-index h2 small {
+  font-size: 0.8rem;
+  font-weight: 400;
+  color: #64748b;
+}
+
 // A heading is a link to itself; it must read as a heading, not as a link.
 .kb-article .header-anchor {
   color: inherit;

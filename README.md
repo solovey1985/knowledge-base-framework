@@ -326,11 +326,21 @@ Set `build.target` to `"local"` and deploy the `docs/` directory.
 
 ## CLI Commands
 
-- `kb init [name]` - Create new project
-- `kb update` - Refresh server/build/workflow templates after upgrading the framework
-- `kb serve` - Start development server  
-- `kb build` - Build static site
-- `kb help` - Show help
+| Command | Purpose |
+| --- | --- |
+| `kb init [name]` | Create a project |
+| `kb serve [--config f] [--plugins f] [--port n] [--host a] [--watch]` | Start the server; `--watch` reloads open pages on content changes (never in production) |
+| `kb build [--config f] [--plugins f]` | Build the static site; a site that needs authentication is refused |
+| `kb doctor [--private] [--verbose]` | Validate configuration and plugins offline |
+| `kb update [--dry-run] [--force]` | Refresh framework-managed files; files you changed are kept |
+
+The same entry points are available in code: `createApp()`, `startServer()`, `buildSite()` and `checkProject()`. The server answers `GET /healthz` with an empty 204 for hosting health checks; `PORT` and `HOST` come from the environment.
+
+## Plugins and notes
+
+- [PLUGIN_AUTHORING.md](PLUGIN_AUTHORING.md): write and connect your own plugin (`"module": "./plugins/x.cjs"` in `kb.plugins.json`).
+- [NOTES.md](NOTES.md): front matter, `[[wiki links]]`, backlinks and tags.
+- [WORK_MANAGER.md](WORK_MANAGER.md): task management, including the overview of all projects.
 
 ## License
 

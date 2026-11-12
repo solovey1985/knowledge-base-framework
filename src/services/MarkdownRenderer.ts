@@ -32,6 +32,19 @@ const MATH_INLINE = {
   renderer: (token: { text?: string }) => escapeMath(token.text || '')
 };
 
+/**
+ * Anchor id of a heading. Letters and digits of any script are kept, so Ukrainian
+ * headings get working anchors; ids of ASCII headings are unchanged.
+ */
+export function slugifyHeading(text: string): string {
+  return String(text ?? '')
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}_\s-]/gu, '')
+    .replace(/\s+/g, '-')
+    .replace(/--+/g, '-')
+    .trim();
+}
+
 export interface MarkdownRendererOptions {
   isStaticSite?: boolean;
   baseUrl?: string;
@@ -179,17 +192,7 @@ export class MarkdownRenderer {
     const currentMarkdownPath = this.normalizePath(currentPath);
     const currentDirectory = currentMarkdownPath ? path.posix.dirname(currentMarkdownPath) : '';
 
-    const slugify = (text: string): string => {
-      if (!text || typeof text !== 'string') {
-        text = String(text || '');
-      }
-      return text
-        .toLowerCase()
-        .replace(/[^\w\s-]/g, '')
-        .replace(/\s+/g, '-')
-        .replace(/--+/g, '-')
-        .trim();
-    };
+    const slugify = slugifyHeading;
 
     renderer.heading = (token: any) => {
       const text = typeof token === 'object' ? token.text : String(token);

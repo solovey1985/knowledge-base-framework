@@ -1,6 +1,7 @@
 import { registerPlugin } from '../core/pluginRegistry';
 import { googleDriveStoragePlugin, GoogleDriveStorageOptions } from './google-drive-storage';
 import { interviewPrepPlugin, InterviewPrepPluginOptions } from './interviewPrepPlugin';
+import { notesPlugin, NotesOptions } from './notes';
 import { passwordAuthPlugin, PasswordAuthOptions } from './password-auth';
 import { techMemoryPlugin, TechMemoryPluginOptions } from './techMemoryPlugin';
 import { threeDViewerPlugin, ThreeDViewerPluginOptions } from './threeDViewerPlugin';
@@ -13,3 +14,4 @@ registerPlugin<TechMemoryPluginOptions>({ name: 'tech-memory', create: options =
 registerPlugin<PasswordAuthOptions>({ name: 'password-auth', create: options => passwordAuthPlugin(options) });
 registerPlugin<GoogleDriveStorageOptions>({ name: 'google-drive-storage', create: options => googleDriveStoragePlugin(options) });
 registerPlugin<WorkManagerOptions>({ name: 'work-manager', create: options => workManagerPlugin(options) });
+registerPlugin<NotesOptions>({ name: 'notes', aliases: ['wiki-links'], create: options => notesPlugin(options) });

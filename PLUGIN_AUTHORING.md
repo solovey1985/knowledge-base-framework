@@ -42,6 +42,7 @@ startServer();
 | `markdownExtensions` | [marked extensions](https://marked.js.org/using_pro#extensions) applied to every Markdown render: custom inline or block syntax. |
 | `transformPage(page, context)` | Post-process a rendered Markdown document: add HTML, change the title or metadata. Return the changed page or nothing. |
 | `searchDocuments(context)` | Add documents to the search index. A failure is logged and never breaks search. |
+| `onContentChange(path)` | Called on a server when content files change; drop caches derived from content. |
 | `assetsDir` | Absolute directory served at `/plugin-assets/<id>/` and copied by static builds. |
 | `clientEntry` | `{ file, marker, cssFile? }`: an ES module loaded only on pages that contain an element with the `marker` attribute. |
 | `clientAssets` | `{ css, js }` public URLs added to every page. |

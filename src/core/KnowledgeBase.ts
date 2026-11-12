@@ -147,7 +147,10 @@ export class KnowledgeBase {
     private watchContent(): ContentWatcher {
         if (!this.contentWatcher) {
             this.contentWatcher = new ContentWatcher(this.fileService.getRootPath());
-            this.contentWatcher.onChange(() => this.navigationService.invalidate());
+            this.contentWatcher.onChange(changed => {
+                this.navigationService.invalidate();
+                for (const plugin of this.options.plugins || []) plugin.onContentChange?.(changed);
+            });
             this.contentWatcher.start();
         }
         return this.contentWatcher;

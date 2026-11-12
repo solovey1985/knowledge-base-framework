@@ -15,7 +15,7 @@
     "build:assets": "node scripts/build-icon-styles.mjs && vite build",
     "build:assets:watch": "node scripts/build-icon-styles.mjs && vite build --watch",
     "build:watch": "tsc --watch",
-    "test": "npm run build && node --test tests/password-auth.test.cjs tests/google-drive-storage.test.cjs tests/google-drive-setup.test.mjs tests/drive-probe-policy.test.mjs tests/work-manager.test.cjs tests/navigation.test.cjs tests/search-index.test.cjs tests/cli-update.test.cjs tests/static-build.test.cjs tests/entrypoints.test.cjs tests/plugin-system.test.cjs",
+    "test": "npm run build && node --test tests/password-auth.test.cjs tests/google-drive-storage.test.cjs tests/google-drive-setup.test.mjs tests/drive-probe-policy.test.mjs tests/work-manager.test.cjs tests/navigation.test.cjs tests/search-index.test.cjs tests/cli-update.test.cjs tests/static-build.test.cjs tests/entrypoints.test.cjs tests/plugin-system.test.cjs tests/notes.test.cjs",
     "test:watch": "npm run build && node --test --watch tests/password-auth.test.cjs",
     "lint": "eslint \"src/**/*.ts\" \"client/**/*.ts\" \"client/**/*.tsx\"",
     "prepublishOnly": "npm run test && npm run lint",
@@ -55,6 +55,7 @@
     "WORK_MANAGER.md",
     "CLIENT_PLUGINS.md",
     "PLUGIN_AUTHORING.md",
+    "NOTES.md",
     "docs/examples/plugins/**/*"
   ],
   "dependencies": {

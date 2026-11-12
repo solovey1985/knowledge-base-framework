@@ -1,6 +1,11 @@
 {
   "plugins": [
     {
+      "name": "notes",
+      "enabled": true,
+      "options": {}
+    },
+    {
       "name": "threeDViewer",
       "enabled": true,
       "options": {

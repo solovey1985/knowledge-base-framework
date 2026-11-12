@@ -45,4 +45,5 @@ export * from './core/storage';
 export { splitFrontMatter, frontMatterTags } from './core/frontMatter';
 export { googleDriveStoragePlugin, GoogleDriveStorageOptions } from './plugins/google-drive-storage';
 export { workManagerPlugin, WorkManagerOptions } from './plugins/work-manager';
+export { notesPlugin, NotesOptions } from './plugins/notes';
 export { WorkProject, WorkTask, validateProject } from './plugins/work-manager/model';
