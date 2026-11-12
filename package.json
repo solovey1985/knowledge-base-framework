@@ -1,6 +1,6 @@
 {
   "name": "@solovey1985/knowledge-base-framework",
-  "version": "1.0.10",
+  "version": "2.0.0-rc.17",
   "description": "A flexible framework for building markdown-based knowledge base and documentation portals with support for Mermaid diagrams, LaTeX math, and syntax highlighting",
   "main": "lib/index.js",
   "types": "lib/index.d.ts",
@@ -8,17 +8,21 @@
     "kb": "lib/cli/kb.js"
   },
   "engines": {
-    "node": ">=16.0.0"
+    "node": "^20.19.0 || ^22.13.0 || >=24.0.0"
   },
   "scripts": {
-    "build": "npm run build:assets && tsc && node scripts/copy-service-templates.mjs",
-    "build:assets": "vite build",
-    "build:assets:watch": "vite build --watch",
+    "build": "npm run typecheck:client && npm run build:assets && tsc && node scripts/copy-service-templates.mjs",
+    "build:assets": "node scripts/build-icon-styles.mjs && vite build",
+    "build:assets:watch": "node scripts/build-icon-styles.mjs && vite build --watch",
     "build:watch": "tsc --watch",
-    "test": "jest --passWithNoTests",
-    "test:watch": "jest --watch",
-    "lint": "eslint src/**/*.ts",
-    "prepublishOnly": "npm run test && npm run lint"
+    "test": "npm run build && node --test tests/password-auth.test.cjs tests/google-drive-storage.test.cjs tests/google-drive-setup.test.mjs tests/drive-probe-policy.test.mjs tests/work-manager.test.cjs tests/navigation.test.cjs tests/search-index.test.cjs tests/cli-update.test.cjs",
+    "test:watch": "npm run build && node --test --watch tests/password-auth.test.cjs",
+    "lint": "eslint \"src/**/*.ts\" \"client/**/*.ts\" \"client/**/*.tsx\"",
+    "prepublishOnly": "npm run test && npm run lint",
+    "test:auth": "npm run build && node --test tests/password-auth.test.cjs",
+    "test:storage": "npm run build && node --test tests/google-drive-storage.test.cjs tests/drive-probe-policy.test.mjs",
+    "test:work-manager": "npm run build && node --test tests/work-manager.test.cjs",
+    "typecheck:client": "tsc -p tsconfig.client.json"
   },
   "keywords": [
     "documentation",
@@ -45,38 +49,56 @@
     "templates/**/*",
     "assets/**/*",
     "README.md",
-    "LICENSE"
+    "LICENSE",
+    "PASSWORD_AUTH.md",
+    "GOOGLE_DRIVE_STORAGE.md",
+    "scripts/setup-google-drive.mjs",
+    "WORK_MANAGER.md",
+    "CLIENT_PLUGINS.md"
   ],
   "dependencies": {
-    "chokidar": "^3.5.3",
+    "argon2": "^0.45.1",
     "express": "^4.18.0",
     "fs-extra": "^11.1.1",
-    "glob": "^10.3.10",
+    "google-auth-library": "^11.3.2",
     "handlebars": "^4.7.9",
     "highlight.js": "^11.11.1",
+    "jsonwebtoken": "^9.0.3",
     "lunr": "^2.3.9",
     "marked": "^16.2.0",
-    "mime-types": "^2.1.35"
+    "mime-types": "^2.1.35",
+    "on-headers": "^1.1.0",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1",
+    "yaml": "^2.9.1"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
+    "@iconify-json/lucide": "^1.2.151",
+    "@iconify/tailwind4": "^1.2.3",
+    "@tailwindcss/vite": "^4.3.4",
     "@types/express": "^4.17.17",
     "@types/fs-extra": "^11.0.1",
+    "@types/jsonwebtoken": "^9.0.10",
     "@types/lunr": "^2.3.7",
     "@types/mime-types": "^2.1.1",
     "@types/node": "^20.5.0",
-    "@typescript-eslint/eslint-plugin": "^6.4.0",
-    "@typescript-eslint/parser": "^6.4.0",
-    "eslint": "^8.57.1",
-    "globals": "^17.4.0",
-    "jest": "^29.6.2",
-    "nodemon": "^3.0.1",
+    "@types/on-headers": "^1.0.4",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@types/three": "^0.187.0",
+    "eslint": "^10.14.0",
+    "globals": "^17.14.0",
     "sass": "^1.99.0",
+    "tailwindcss": "^4.3.4",
     "typescript": "^5.1.6",
-    "typescript-eslint": "^8.58.0",
+    "typescript-eslint": "^8.72.1",
     "vite": "^8.0.4"
   },
   "peerDependencies": {
     "express": "^4.18.0"
+  },
+  "overrides": {
+    "minimatch": "^11.0.4"
   }
 }
