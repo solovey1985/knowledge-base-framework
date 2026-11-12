@@ -55,6 +55,7 @@ export interface InterviewPrepPluginOptions {
 export function interviewPrepPlugin(options: InterviewPrepPluginOptions = {}): KnowledgeBasePlugin {
   return {
     id: 'interview-prep',
+    clientEntry: { file: 'kb-plugin-interview-prep.js', cssFile: 'kb-icons-interview-prep.css', marker: 'data-kb-interview-page' },
     contentRenderers: [
       {
         id: 'interview-prep-renderer',

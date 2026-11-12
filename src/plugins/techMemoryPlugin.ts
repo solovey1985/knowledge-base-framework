@@ -55,6 +55,7 @@ export interface TechMemoryPluginOptions {
 export function techMemoryPlugin(options: TechMemoryPluginOptions = {}): KnowledgeBasePlugin {
   return {
     id: 'tech-memory',
+    clientEntry: { file: 'kb-plugin-tech-memory.js', cssFile: 'kb-icons-tech-memory.css', marker: 'data-kb-tech-memory-page' },
     contentRenderers: [
       {
         id: 'tech-memory-renderer',

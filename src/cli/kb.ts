@@ -2,6 +2,7 @@
 import * as path from 'path';
 import * as fs from 'fs/promises';
 import { existsSync } from 'fs';
+import { spawnSync } from 'child_process';
 import express from 'express';
 import frameworkPackage from '../../package.json';
 import { KnowledgeBase, StaticSiteBuilder, loadPluginsFromFile } from '../index';
@@ -134,6 +135,22 @@ async function updateProject(): Promise<void> {
         console.log('===========================');
         console.log('🔄 Updating project files...');
 
+        // The global CLI and project runtime must use the same published version.
+        const packageName = '@solovey1985/knowledge-base-framework';
+        const targetVersion = frameworkPackage.version;
+        const installedPath = path.join(projectDir, 'node_modules', packageName, 'package.json');
+        const installedVersion = existsSync(installedPath)
+            ? JSON.parse(await fs.readFile(installedPath, 'utf-8')).version : undefined;
+        if (installedVersion !== targetVersion || packageJson.dependencies?.[packageName] !== targetVersion) {
+            if (!/^[0-9]+\.[0-9]+\.[0-9]+(?:-[a-zA-Z0-9.-]+)?$/.test(targetVersion)) {
+                throw new Error('Invalid framework version');
+            }
+            const result = spawnSync('npm', ['install', '--save-exact', `${packageName}@${targetVersion}`], {
+                cwd: projectDir, stdio: 'inherit', shell: process.platform === 'win32'
+            });
+            if (result.error || result.status !== 0) throw new Error('Unable to update the project framework dependency');
+        }
+
         const tokens = {
             PROJECT_NAME: packageJson.name,
             PORT: config.server?.port || 3000,
@@ -141,12 +158,16 @@ async function updateProject(): Promise<void> {
             ASSETS_DIR: 'assets'
         } as Record<string, string | number>;
 
-        await fs.writeFile(path.join(projectDir, 'server.js'), await renderTemplate('server.template.js', tokens));
-        console.log('  ✔ server.js');
-        await fs.writeFile(path.join(projectDir, 'build.js'), await renderTemplate('build.template.js', tokens));
-        console.log('  ✔ build.js');
-        await fs.writeFile(path.join(projectDir, 'README.md'), await renderTemplate('README.template.md', { PROJECT_NAME: packageJson.name }));
-        console.log('  ✔ README.md');
+        if (!config.server?.entrypoint) {
+            await fs.writeFile(path.join(projectDir, 'server.js'), await renderTemplate('server.template.js', tokens));
+            console.log('  ✔ server.js');
+            await fs.writeFile(path.join(projectDir, 'build.js'), await renderTemplate('build.template.js', tokens));
+            console.log('  ✔ build.js');
+            await fs.writeFile(path.join(projectDir, 'README.md'), await renderTemplate('README.template.md', { PROJECT_NAME: packageJson.name }));
+            console.log('  ✔ README.md');
+        } else {
+            console.log('  ✔ Preserved project-owned server.js, build.js and README.md (server.entrypoint configured)');
+        }
 
         const pluginsConfigPath = path.join(projectDir, config.pluginsConfigPath || 'kb.plugins.json');
         try {
@@ -169,15 +190,23 @@ async function updateProject(): Promise<void> {
 async function serveProject(args: string[]): Promise<void> {
     try {
         const { config, path: configPath } = await loadConfigFile();
+        // An explicit project entrypoint can prepare local credentials and plugins
+        // before the standard plugin loader runs. Never auto-discover executable files.
+        if (config.server?.entrypoint) {
+            const entrypoint = path.resolve(path.dirname(configPath), config.server.entrypoint);
+            const application = require(entrypoint) as { startServer?: () => unknown };
+            if (typeof application.startServer !== 'function') {
+                throw new Error('server.entrypoint must export startServer()');
+            }
+            await application.startServer();
+            return;
+        }
         const plugins = resolvePluginsForConfig(config, path.dirname(configPath));
 
         const app = express();
         const projectAssetsDir = path.resolve('assets');
         const frameworkRoot = path.resolve(__dirname, '..', '..');
         const frameworkAssetsDir = resolveFrameworkAssetsDir(frameworkRoot, projectAssetsDir);
-
-        app.use('/assets', express.static(projectAssetsDir, { fallthrough: false }));
-        app.use('/framework-assets', express.static(frameworkAssetsDir, { fallthrough: false }));
 
         const kb = new KnowledgeBase({
             ...config,
@@ -188,6 +217,10 @@ async function serveProject(args: string[]): Promise<void> {
                 assetsBasePath: config.templates?.assetsBasePath || '/framework-assets'
             }
         });
+
+        kb.setupSecurity(app);
+        app.use('/assets', express.static(projectAssetsDir, { fallthrough: false }));
+        app.use('/framework-assets', express.static(frameworkAssetsDir, { fallthrough: false }));
 
         kb.setupMiddleware(app);
 
@@ -226,7 +259,7 @@ async function buildProject(args: string[]): Promise<void> {
 }
 
 function resolvePluginsForConfig(config: { pluginsConfigPath?: string }, baseDir: string): ReturnType<typeof loadPluginsFromFile> {
-    const configuredPath = config.pluginsConfigPath || './kb.plugins.json';
+    const configuredPath = process.env.KB_PLUGINS_CONFIG || config.pluginsConfigPath || './kb.plugins.json';
     const absolutePath = path.resolve(baseDir, configuredPath);
     return loadPluginsFromFile(absolutePath);
 }

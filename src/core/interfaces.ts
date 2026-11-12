@@ -50,7 +50,7 @@ export interface KnowledgeBaseOptions {
   /** Search configuration */
   search?: SearchOptions;
 
-  /** Private access configuration */
+  /** @deprecated Enabled legacy auth is rejected. Use the passwordAuth plugin. */
   auth?: AuthOptions;
 
   /** Optional content/UI plugins */
@@ -78,6 +78,8 @@ export interface NavigationOptions {
 }
 
 export interface ServerOptions {
+  /** Optional CommonJS module exporting startServer(), relative to the config file. */
+  entrypoint?: string;
   /** Port to run the development server on */
   port?: number;
   

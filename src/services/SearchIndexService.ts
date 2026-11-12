@@ -4,6 +4,10 @@ import lunr from 'lunr';
 import { KnowledgeBase } from '../core/KnowledgeBase';
 import { FileService } from './FileService';
 
+const unicodeTrimmer: lunr.PipelineFunction = token => token.update(value =>
+  value.replace(/^[^\p{L}\p{N}]+|[^\p{L}\p{N}]+$/gu, ''));
+lunr.Pipeline.registerFunction(unicodeTrimmer, 'kbUnicodeTrimmer');
+
 export interface SearchIndexOptions {
   enabled?: boolean;
   indexFileName?: string;
@@ -30,6 +34,7 @@ export class SearchIndexService {
   private documentsCache?: SearchDocument[];
   private baseUrl: string;
   private isStaticSite: boolean;
+  private pendingBuild?: Promise<void>;
 
   constructor(
     knowledgeBase: KnowledgeBase,
@@ -49,7 +54,7 @@ export class SearchIndexService {
       titleBoost: options.titleBoost ?? 10,
       bodyBoost: options.bodyBoost ?? 1
     };
-    this.indexFilePath = path.join(fileService.getRootPath(), this.options.indexFilePath);
+    this.indexFilePath = path.resolve(fileService.getRootPath(), this.options.indexFilePath);
   }
 
   isEnabled(): boolean {
@@ -90,21 +95,28 @@ export class SearchIndexService {
   }
 
   async build(): Promise<void> {
+    // Browser retries and concurrent readers share one build, including failures.
+    if (!this.pendingBuild) {
+      this.pendingBuild = this.buildIndex().finally(() => { this.pendingBuild = undefined; });
+    }
+    return this.pendingBuild;
+  }
+
+  private async buildIndex(): Promise<void> {
     if (!this.options.enabled) {
       return;
     }
 
     console.log('🔎 Building search index...');
     const documents = await this.collectSearchDocuments();
-    if (documents.length === 0) {
-      console.log('  ⚠️ No markdown documents found for search index.');
-      return;
-    }
-
+    const options = this.options;
     const index = lunr(function () {
       this.ref('id');
-      this.field('title', { boost: 10 });
-      this.field('body');
+      this.field('title', { boost: options.titleBoost });
+      this.field('body', { boost: options.bodyBoost });
+      // Lunr's default ASCII trimmer removes entire Ukrainian words.
+      this.pipeline.remove(lunr.trimmer);
+      this.pipeline.before(lunr.stopWordFilter, unicodeTrimmer);
 
       documents.forEach(doc => this.add(doc));
     });
@@ -171,19 +183,18 @@ export class SearchIndexService {
     const documents: SearchDocument[] = [];
 
     for (const filePath of markdownFiles) {
-      const rendered = await this.knowledgeBase.renderContent(filePath);
-      if (!rendered || !rendered.htmlContent) {
-        continue;
-      }
-
-      const plainText = this.stripHtml(rendered.htmlContent);
+      // Search indexes authored Markdown, not page chrome or live plugin state.
+      // Full page rendering repeats navigation scans and synchronous Git commands.
+      const markdown = await this.fileService.readFile(filePath);
+      const rendered = await this.knowledgeBase.getMarkdownRenderer().render(markdown, filePath);
+      const plainText = this.stripHtml(rendered.html);
       if (!plainText) {
         continue;
       }
 
       documents.push({
         id: filePath,
-        title: rendered.title || this.knowledgeBase.getTitle() || filePath,
+        title: markdown.match(/^#\s+(.+)$/m)?.[1]?.trim() || path.basename(filePath, '.md'),
         body: plainText,
         url: this.getDocumentUrl(filePath),
         snippet: plainText.slice(0, 280)

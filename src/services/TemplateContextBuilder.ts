@@ -12,7 +12,7 @@ export class TemplateContextBuilder {
     const breadcrumbs = (content.breadcrumbs || []).map(crumb => ({
       title: crumb.title,
       path: crumb.path,
-      href: this.composeHref(crumb.path, true)
+      href: this.composeHref(crumb.path, !(content.metadata?.isWorkManager && crumb.path === content.metadata.path))
     }));
 
     return {
@@ -29,7 +29,7 @@ export class TemplateContextBuilder {
       content,
       navigation,
       breadcrumbs,
-      assets: this.getAssetContext(baseUrl),
+      assets: this.getAssetContext(baseUrl, content.htmlContent),
       search: {
         enabled: this.options.search?.enabled !== false,
         indexFileName: this.options.search?.indexUrlPath || this.options.search?.indexFileName || 'search-index.json'
@@ -43,9 +43,11 @@ export class TemplateContextBuilder {
     }
 
     return items.map(item => {
-      const isDirectory = item.children && item.children.length > 0;
+      const isDirectory = item.isDirectory ?? Boolean(item.children?.length);
       return {
         ...item,
+        isDirectory,
+        childrenId: `kb-nav-${Buffer.from(item.path).toString('hex')}`,
         href: this.composeHref(item.path, isDirectory),
         children: this.mapNavigationItems(item.children || [])
       };
@@ -59,7 +61,7 @@ export class TemplateContextBuilder {
     return isDirectory ? this.ensureTrailingSlash(href) : href;
   }
 
-  private getAssetContext(baseUrl: string): { base: string; css: string[]; js: string[] } {
+  private getAssetContext(baseUrl: string, html: string): { base: string; css: string[]; js: string[]; scripts: Array<{ src: string; module: boolean }> } {
     const assetBase = this.assetsBaseOverride
       || (this.options.templates?.assetsBasePath
         ? this.normalizePublicPath(this.options.templates.assetsBasePath)
@@ -81,10 +83,23 @@ export class TemplateContextBuilder {
         .filter(Boolean)
     ];
 
+    const entries = (this.options.plugins || []).flatMap(plugin => {
+      const entry = plugin.clientEntry;
+      const container = entry && /^data-[a-z0-9-]+$/.test(entry.marker)
+        ? new RegExp(`<[^>]+\\s${entry.marker}(?=[\\s=>])`, 'i') : undefined;
+      if (!entry || !/^kb-plugin-[a-z-]+\.js$/.test(entry.file) || !container?.test(html)) return [];
+      if (entry.cssFile && /^kb-icons-[a-z-]+\.css$/.test(entry.cssFile)) {
+        css.push(`${assetBase}/${entry.cssFile}`);
+      }
+      return [`${assetBase}/${entry.file}`];
+    });
+    js.push(...entries);
     return {
       base: assetBase,
       css: [...new Set(css)],
-      js: [...new Set(js)]
+      js: [...new Set(js)],
+      // Vite emits ESM (including import.meta); custom scripts keep classic-script semantics.
+      scripts: [...new Set(js)].map(src => ({ src, module: src === `${assetBase}/kb-app.js` || entries.includes(src) }))
     };
   }
 

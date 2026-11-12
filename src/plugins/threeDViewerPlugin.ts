@@ -32,6 +32,7 @@ export function threeDViewerPlugin(options: ThreeDViewerPluginOptions = {}): Kno
 
   return {
     id: 'three-d-viewer',
+    clientEntry: { file: 'kb-plugin-three-d-viewer.js', cssFile: 'kb-icons-three-d-viewer.css', marker: 'data-kb-3d-viewer' },
     contentRenderers: [
       {
         id: 'three-d-file-renderer',

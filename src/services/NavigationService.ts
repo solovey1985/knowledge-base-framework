@@ -59,6 +59,7 @@ export class NavigationService {
           const isActive = currentPath === entry.path;
           
           navigation.push({
+            isDirectory: true,
             title: this.formatFileName(entry.name),
             path: entry.path,
             children: subNav,
@@ -173,8 +174,8 @@ export class NavigationService {
     }
 
     // Check if one is a directory and the other is not (based on having children)
-    const aIsDirectory = a.children.length > 0;
-    const bIsDirectory = b.children.length > 0;
+    const aIsDirectory = a.isDirectory ?? a.children.length > 0;
+    const bIsDirectory = b.isDirectory ?? b.children.length > 0;
 
     if (aIsDirectory !== bIsDirectory) {
       return aIsDirectory ? -1 : 1;

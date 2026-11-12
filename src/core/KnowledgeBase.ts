@@ -1,6 +1,5 @@
 import { Express, Request, Response, NextFunction } from 'express';
 import * as path from 'path';
-import crypto from 'crypto';
 import express from 'express';
 import { KnowledgeBaseOptions, TemplateOptions } from '../core/interfaces';
 import { FileService } from '../services/FileService';
@@ -13,6 +12,7 @@ import { TemplateRenderer, TemplateRendererOptions } from '../services/TemplateR
 import { TemplateContextBuilder } from '../services/TemplateContextBuilder';
 import { SearchIndexService } from '../services/SearchIndexService';
 import { PluginManager } from '../services/PluginManager';
+import { StorageRegistry } from './storage';
 
 const IMAGE_EXTENSIONS = new Set(['.png', '.jpg', '.jpeg', '.gif', '.webp', '.bmp', '.svg']);
 const TEXT_PREVIEW_EXTENSIONS = new Set([
@@ -24,6 +24,7 @@ const HTML_EXTENSION = '.html';
  * Main Knowledge Base framework class
  */
 export class KnowledgeBase {
+    readonly storage: StorageRegistry;
     private options: KnowledgeBaseOptions;
     private fileService: FileService;
     private navigationService: NavigationService;
@@ -35,6 +36,16 @@ export class KnowledgeBase {
     private pluginManager: PluginManager;
 
     constructor(options: KnowledgeBaseOptions) {
+        this.storage = new StorageRegistry((options.plugins || []).flatMap(plugin => plugin.storageProviders || []));
+        if (options.auth?.enabled || process.env.KB_AUTH_ENABLED === 'true') {
+            throw new Error('Legacy auth is unsupported. Configure the passwordAuth plugin; old cookies are not accepted.');
+        }
+        const authentication = (options.plugins || []).filter(plugin => plugin.authentication);
+        if (authentication.length > 1) throw new Error('Only one authentication plugin is allowed.');
+        if (!authentication.length && (options.plugins || []).some(plugin => plugin.requiresAuthentication)) {
+            throw new Error('This plugin requires authentication.');
+        }
+        if (options.isStaticSite && authentication.length) throw new Error('Authentication requires a server; static export would expose private content.');
         this.options = this.mergeWithDefaults(options);
         this.fileService = new FileService(this.options.contentRootPath);
         this.navigationService = new NavigationService(this.fileService);
@@ -102,24 +113,27 @@ export class KnowledgeBase {
                 titleBoost: options.search?.titleBoost,
                 bodyBoost: options.search?.bodyBoost
             },
-            auth: {
-                enabled: options.auth?.enabled || false,
-                username: options.auth?.username || '',
-                password: options.auth?.password || '',
-                cookieName: options.auth?.cookieName || 'kb_auth',
-                cookieSecret: options.auth?.cookieSecret || '',
-                loginPath: options.auth?.loginPath || '/login',
-                logoutPath: options.auth?.logoutPath || '/logout',
-                ...options.auth
-            },
             plugins: options.plugins || []
         };
     }
 
-    /**
-     * Setup Express middleware for serving content
-     */
+    // Avoid installing the same guard twice when the host calls setupSecurity explicitly.
+    private securedApps = new WeakSet<Express>();
+
+    /** Call before registering application static files or routes. Also called by setupMiddleware. */
+    setupSecurity(app: Express): void {
+        if (this.securedApps.has(app)) return;
+        for (const plugin of this.options.plugins || []) {
+            if (plugin.authentication) app.use(plugin.authentication.middleware);
+        }
+        this.securedApps.add(app);
+    }
+
     setupMiddleware(app: Express): void {
+        this.setupSecurity(app);
+        for (const plugin of this.options.plugins || []) plugin.setupServer?.(app, {
+            storage: this.storage, contentRootPath: this.options.contentRootPath,
+        });
         app.use(express.urlencoded({ extended: false }));
 
         // Unicode path normalization middleware
@@ -137,56 +151,6 @@ export class KnowledgeBase {
             }
             next();
         };
-
-        const auth = this.options.auth;
-        if (auth?.enabled) {
-            app.get(auth.loginPath || '/login', (req: Request, res: Response) => {
-                const redirect = this.normalizeRedirectTarget(String(req.query.redirect || req.query.next || '/'));
-                res.status(200).send(this.renderLoginPage(redirect));
-            });
-
-            app.post(auth.loginPath || '/login', (req: Request, res: Response) => {
-                const username = String(req.body?.username || '').trim();
-                const password = String(req.body?.password || '');
-                const redirect = this.normalizeRedirectTarget(String(req.body?.redirect || '/'));
-
-                if (this.verifyCredentials(username, password)) {
-                    const token = this.createAuthToken(username);
-                    const cookieName = auth.cookieName || 'kb_auth';
-                    const cookieValue = `${cookieName}=${token}; Path=/; HttpOnly; SameSite=Lax${this.isSecureRequest(req) ? '; Secure' : ''}`;
-                    res.setHeader('Set-Cookie', cookieValue);
-                    res.redirect(302, redirect);
-                    return;
-                }
-
-                res.status(401).send(this.renderLoginPage(redirect, 'Invalid username or password.'));
-            });
-
-            app.post(auth.logoutPath || '/logout', (_req: Request, res: Response) => {
-                const cookieName = auth.cookieName || 'kb_auth';
-                res.setHeader('Set-Cookie', `${cookieName}=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0`);
-                res.redirect(302, auth.loginPath || '/login');
-            });
-
-            app.use((req: Request, res: Response, next: NextFunction) => {
-                const pathname = req.path || '';
-                if (pathname.startsWith('/assets') || pathname.startsWith('/framework-assets') || pathname === auth.loginPath || pathname === auth.logoutPath) {
-                    return next();
-                }
-
-                if (this.isAuthenticated(req)) {
-                    return next();
-                }
-
-                if (req.method === 'GET' || req.method === 'HEAD') {
-                    const redirect = this.normalizeRedirectTarget(String(req.originalUrl || req.url || '/'));
-                    res.status(200).send(this.renderLoginPage(redirect));
-                    return;
-                }
-
-                res.status(401).send(this.renderLoginPage('/'));
-            });
-        }
 
         // Content routing middleware
         app.get('/content/*', normalizeUnicodePath, async (req: Request, res: Response, next: NextFunction) => {
@@ -828,167 +792,6 @@ export class KnowledgeBase {
             .replace(/>/g, '&gt;')
             .replace(/"/g, '&quot;')
             .replace(/'/g, '&#039;');
-    }
-
-    private verifyCredentials(username: string, password: string): boolean {
-        const auth = this.options.auth;
-        if (!auth?.enabled) {
-            return true;
-        }
-
-        if (!auth.username || !auth.password) {
-            return false;
-        }
-
-        return this.secureEquals(username, auth.username) && this.secureEquals(password, auth.password);
-    }
-
-    private createAuthToken(username: string): string {
-        const auth = this.options.auth;
-        const secret = auth?.cookieSecret || `${auth?.username || ''}:${auth?.password || ''}`;
-        const payload = Buffer.from(username, 'utf8').toString('base64url');
-        const signature = crypto.createHmac('sha256', secret).update(payload).digest('base64url');
-        return `${payload}.${signature}`;
-    }
-
-    private isAuthenticated(req: Request): boolean {
-        const auth = this.options.auth;
-        if (!auth?.enabled) {
-            return true;
-        }
-
-        const cookieName = auth.cookieName || 'kb_auth';
-        const token = this.getCookieValue(req, cookieName);
-        if (!token) {
-            return false;
-        }
-
-        const secret = auth.cookieSecret || `${auth.username || ''}:${auth.password || ''}`;
-        const [payload, signature] = token.split('.');
-        if (!payload || !signature) {
-            return false;
-        }
-
-        const expected = crypto.createHmac('sha256', secret).update(payload).digest('base64url');
-        if (!this.secureEquals(signature, expected)) {
-            return false;
-        }
-
-        try {
-            const username = Buffer.from(payload, 'base64url').toString('utf8');
-            return auth.username ? this.secureEquals(username, auth.username) : true;
-        } catch {
-            return false;
-        }
-    }
-
-    private renderLoginPage(redirectTo: string, errorMessage?: string): string {
-        const auth = this.options.auth;
-        const title = this.escapeHtml(this.options.title || 'Knowledge Base');
-        const loginPath = this.escapeHtml(auth?.loginPath || '/login');
-        const logoutPath = this.escapeHtml(auth?.logoutPath || '/logout');
-        const safeRedirect = this.escapeHtml(redirectTo || '/');
-        const errorHtml = errorMessage
-            ? `<div class="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">${this.escapeHtml(errorMessage)}</div>`
-            : '';
-
-        return `<!doctype html>
-<html lang="en">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Sign in • ${title}</title>
-  <script>
-    window.tailwind = window.tailwind || {};
-    window.tailwind.config = {
-      theme: {
-        extend: {
-          fontFamily: {
-            sans: ['Inter', 'ui-sans-serif', 'system-ui']
-          }
-        }
-      }
-    }
-  </script>
-  <script src="https://cdn.tailwindcss.com"></script>
-</head>
-<body class="min-h-screen bg-slate-50 text-slate-900">
-  <main class="flex min-h-screen items-center justify-center p-6">
-    <section class="w-full max-w-md rounded-3xl border border-slate-200 bg-white p-8 shadow-2xl shadow-slate-200/60 backdrop-blur">
-      <div class="mb-8">
-        <p class="text-sm uppercase tracking-[0.3em] text-sky-700">Private access</p>
-        <h1 class="mt-3 text-3xl font-semibold tracking-tight text-slate-900">${title}</h1>
-        <p class="mt-3 text-sm leading-6 text-slate-500">Sign in to continue.</p>
-      </div>
-      ${errorHtml}
-      <form method="post" action="${loginPath}" class="mt-6 space-y-4">
-        <input type="hidden" name="redirect" value="${safeRedirect}">
-        <div>
-          <label class="mb-2 block text-sm font-medium text-slate-700" for="username">Username</label>
-          <input id="username" name="username" autocomplete="username" required class="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-slate-900 outline-none ring-0 placeholder:text-slate-400 focus:border-sky-500 focus:bg-white" placeholder="Username">
-        </div>
-        <div>
-          <label class="mb-2 block text-sm font-medium text-slate-700" for="password">Password</label>
-          <input id="password" name="password" type="password" autocomplete="current-password" required class="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-slate-900 outline-none ring-0 placeholder:text-slate-400 focus:border-sky-500 focus:bg-white" placeholder="Password">
-        </div>
-        <button type="submit" class="w-full rounded-2xl bg-sky-500 px-4 py-3 font-semibold text-white transition hover:bg-sky-600">Sign in</button>
-      </form>
-      <form method="post" action="${logoutPath}" class="mt-4 text-center text-xs text-slate-500">
-        <button type="submit" class="underline decoration-slate-300 underline-offset-4">Logout</button>
-      </form>
-    </section>
-  </main>
-</body>
-</html>`;
-    }
-
-    private normalizeRedirectTarget(value: string): string {
-        if (!value) {
-            return '/';
-        }
-
-        const cleaned = value.startsWith('/') ? value : `/${value}`;
-        return cleaned.replace(/\s+/g, '');
-    }
-
-    private getCookieValue(req: Request, name: string): string | null {
-        const header = req.headers.cookie;
-        if (!header) {
-            return null;
-        }
-
-        const parts = header.split(';');
-        for (const part of parts) {
-            const [key, ...rest] = part.trim().split('=');
-            if (key === name) {
-                return rest.join('=');
-            }
-        }
-
-        return null;
-    }
-
-    private secureEquals(left: string, right: string): boolean {
-        const leftBuffer = Buffer.from(left, 'utf8');
-        const rightBuffer = Buffer.from(right, 'utf8');
-        if (leftBuffer.length !== rightBuffer.length) {
-            return false;
-        }
-
-        return crypto.timingSafeEqual(leftBuffer, rightBuffer);
-    }
-
-    private isSecureRequest(req: Request): boolean {
-        if (req.secure) {
-            return true;
-        }
-
-        const forwardedProto = req.headers['x-forwarded-proto'];
-        if (typeof forwardedProto === 'string') {
-            return forwardedProto.split(',')[0].trim() === 'https';
-        }
-
-        return false;
     }
 
     private setupSearchEndpoint(app: Express): void {

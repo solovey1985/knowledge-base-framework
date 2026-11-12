@@ -25,6 +25,9 @@ export interface ContentItem {
 }
 
 export interface NavigationItem {
+  /** Explicit folder identity, including empty folders and depth-limited nodes. */
+  isDirectory?: boolean;
+  childrenId?: string;
   /** Display title */
   title: string;
   

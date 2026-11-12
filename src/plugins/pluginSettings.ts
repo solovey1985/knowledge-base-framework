@@ -1,3 +1,6 @@
+import { passwordAuthPlugin, PasswordAuthOptions } from './password-auth';
+import { workManagerPlugin, WorkManagerOptions } from './work-manager';
+import { googleDriveStoragePlugin, GoogleDriveStorageOptions } from './google-drive-storage';
 import fs from 'fs';
 import path from 'path';
 import { KnowledgeBasePlugin } from '../core/plugins';
@@ -34,6 +37,19 @@ export function resolvePluginsFromSettings(settings: PluginSettingsFile): Knowle
     }
 
     const name = normalizePluginName(entry.name);
+    if (name === 'work-manager') {
+      plugins.push(workManagerPlugin((entry.options || {}) as unknown as WorkManagerOptions));
+      continue;
+    }
+    if (name === 'google-drive-storage') {
+      plugins.push(googleDriveStoragePlugin((entry.options || {}) as unknown as GoogleDriveStorageOptions));
+      continue;
+    }
+    if (name === 'password-auth') {
+      plugins.push(passwordAuthPlugin((entry.options || {}) as PasswordAuthOptions));
+      continue;
+    }
+
     if (name === 'three-d-viewer') {
       plugins.push(threeDViewerPlugin((entry.options || {}) as ThreeDViewerPluginOptions));
       continue;
@@ -63,5 +79,8 @@ function normalizePluginName(name: string): string {
     .replace(/plugin$/g, '')
     .replace(/three[d]?viewer/g, 'three-d-viewer')
     .replace(/interviewprep/g, 'interview-prep')
-    .replace(/techmemory/g, 'tech-memory');
+    .replace(/techmemory/g, 'tech-memory')
+    .replace(/passwordauth/g, 'password-auth')
+    .replace(/googledrivestorage/g, 'google-drive-storage')
+    .replace(/workmanager/g, 'work-manager');
 }

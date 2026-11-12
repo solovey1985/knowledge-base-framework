@@ -1,5 +1,7 @@
+import type { Express, RequestHandler } from 'express';
 import type { ContentItem, RenderedContent } from './models';
 import type { FileService } from '../services/FileService';
+import type { StorageProvider, StorageRegistry } from './storage';
 
 export interface PluginClientAssets {
   css?: string[];
@@ -50,4 +52,13 @@ export interface KnowledgeBasePlugin {
   id: string;
   contentRenderers?: ContentRendererPlugin[];
   clientAssets?: PluginClientAssets;
+  /** Built-in ESM entry, emitted only for an enabled plugin on its rendered page. */
+  clientEntry?: { file: string; marker: string; cssFile?: string };
+  /** Runs before all content, API and static routes. At most one authentication provider. */
+  authentication?: { middleware: RequestHandler };
+  storageProviders?: StorageProvider[];
+  /** Writable applications must never silently become public when auth is disabled. */
+  requiresAuthentication?: boolean;
+  /** Registers protected server routes after authentication. */
+  setupServer?: (app: Express, context: { storage: StorageRegistry; contentRootPath: string }) => void;
 }

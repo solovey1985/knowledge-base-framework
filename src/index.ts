@@ -33,3 +33,10 @@ export type {
   TocItem,
   GitCommitInfo
 } from './core/models';
+
+export { passwordAuthPlugin, PasswordAuthOptions } from './plugins/password-auth';
+export { hashPassword } from './plugins/password-auth/password-service';
+export * from './core/storage';
+export { googleDriveStoragePlugin, GoogleDriveStorageOptions } from './plugins/google-drive-storage';
+export { workManagerPlugin, WorkManagerOptions } from './plugins/work-manager';
+export { WorkProject, WorkTask, validateProject } from './plugins/work-manager/model';
