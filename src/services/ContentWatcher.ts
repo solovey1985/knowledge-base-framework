@@ -28,6 +28,9 @@ export class ContentWatcher {
         this.timer = setTimeout(() => this.emit(), this.debounceMs);
         this.timer.unref();
       });
+      // persistent:false is unreliable for recursive watches on Windows/macOS;
+      // unref() guarantees the watcher never keeps the process alive on its own.
+      this.watcher.unref();
       this.watcher.on('error', () => this.close());
       return true;
     } catch {

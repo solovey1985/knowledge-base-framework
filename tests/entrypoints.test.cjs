@@ -21,7 +21,7 @@ async function project(t, plugins) {
 async function listen(t, app) {
   const server = app.listen(0, '127.0.0.1');
   await new Promise(resolve => server.once('listening', resolve));
-  t.after(() => new Promise(resolve => server.close(resolve)));
+  t.after(() => new Promise(resolve => { server.closeAllConnections?.(); server.close(resolve); }));
   return route => fetch(`http://127.0.0.1:${server.address().port}${route}`, { redirect: 'manual' });
 }
 
