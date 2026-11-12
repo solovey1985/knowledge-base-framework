@@ -6,6 +6,7 @@ const DEFAULT_EXTENSIONS = ['.stl', '.obj'];
 const MODEL_EXTENSIONS = new Set([
   '.stl',
   '.obj',
+  '.3mf',
   '.ply',
   '.glb',
   '.gltf'

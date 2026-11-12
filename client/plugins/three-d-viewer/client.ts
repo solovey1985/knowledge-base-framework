@@ -3,6 +3,8 @@ type OrbitControlsModule = typeof import('https://cdn.jsdelivr.net/npm/three@0.1
 type STLLoaderModule = typeof import('https://cdn.jsdelivr.net/npm/three@0.166.1/examples/jsm/loaders/STLLoader.js/+esm');
 type OBJLoaderModule = typeof import('https://cdn.jsdelivr.net/npm/three@0.166.1/examples/jsm/loaders/OBJLoader.js/+esm');
 
+const SUPPORTED_FORMATS = ['stl', 'obj', '3mf'];
+
 type ThreeDeps = {
   THREE: ThreeModule;
   OrbitControls: OrbitControlsModule['OrbitControls'];
@@ -16,7 +18,7 @@ type ModelRotation = {
   z: number;
 };
 
-const DEFAULT_BACKGROUND_COLOR = '#ссс';
+const DEFAULT_BACKGROUND_COLOR = '#cccccc';
 const DEFAULT_MODEL_ROTATION: ModelRotation = { x: 0, y: 0, z: 0 };
 
 let dependenciesLoader: Promise<ThreeDeps> | null = null;
@@ -53,7 +55,7 @@ export async function bootViewer(host: HTMLElement, source: HTMLElement, signal:
     throw new Error('Model path is missing.');
   }
 
-  if (modelFormat !== 'stl' && modelFormat !== 'obj') {
+  if (!SUPPORTED_FORMATS.includes(modelFormat)) {
     throw new Error(`Unsupported model format: ${modelFormat}`);
   }
 
@@ -127,6 +129,12 @@ export async function bootViewer(host: HTMLElement, source: HTMLElement, signal:
         }
       });
       root.add(object);
+    }
+
+    if (modelFormat === '3mf') {
+      // Loaded on demand: 3MF needs a ZIP decoder that STL and OBJ pages should not download.
+      const { ThreeMFLoader } = await import(/* @vite-ignore */ 'https://cdn.jsdelivr.net/npm/three@0.166.1/examples/jsm/loaders/3MFLoader.js/+esm');
+      root.add(await new ThreeMFLoader().loadAsync(modelUrl));
     }
 
     if (signal.aborted) {
