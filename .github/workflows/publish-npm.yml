@@ -1,9 +1,10 @@
 name: Publish npm package
 
+# Publishing is an explicit act: push a tag vX.Y.Z that matches package.json.
 on:
   push:
-    branches:
-      - master
+    tags:
+      - 'v*'
 
 jobs:
   publish:
@@ -19,22 +20,35 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           registry-url: https://registry.npmjs.org
           cache: npm
 
       - name: Install dependencies
         run: npm ci
 
-      - name: Build package
-        run: npm run build
-
-      - name: Set publish version
+      - name: Check that the tag matches package.json
         run: |
-          BASE_VERSION=$(node -p "require('./package.json').version")
-          npm version "${BASE_VERSION}-master.${GITHUB_RUN_ID}" --no-git-tag-version
+          VERSION=$(node -p "require('./package.json').version")
+          if [ "v${VERSION}" != "${GITHUB_REF_NAME}" ]; then
+            echo "Tag ${GITHUB_REF_NAME} does not match package version ${VERSION}" >&2
+            exit 1
+          fi
+
+      - name: Build and test
+        run: npm test
+
+      - name: Lint
+        run: npm run lint
 
       - name: Publish to npm
-        run: npm publish --access public --tag latest
+        # Pre-releases (1.2.3-rc.1) go to the "next" dist-tag and never replace "latest".
+        run: |
+          VERSION=$(node -p "require('./package.json').version")
+          case "$VERSION" in
+            *-*) DIST_TAG=next ;;
+            *) DIST_TAG=latest ;;
+          esac
+          npm publish --access public --tag "$DIST_TAG"
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
