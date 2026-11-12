@@ -23,6 +23,7 @@ export default defineConfig({
         ...Object.fromEntries(['work-manager', 'interview-prep', 'tech-memory', 'three-d-viewer']
           .map(name => [`icons-${name}`, path.resolve(root, `plugins/${name}/icons.css`)])),
         'work-manager': path.resolve(root, 'plugins/work-manager/index.tsx'),
+        'work-overview': path.resolve(root, 'plugins/work-manager/overview.tsx'),
         'three-d-viewer': path.resolve(root, 'plugins/three-d-viewer/index.tsx'),
         'interview-prep': path.resolve(root, 'plugins/interview-prep/index.tsx'),
         'tech-memory': path.resolve(root, 'plugins/tech-memory/index.tsx'),

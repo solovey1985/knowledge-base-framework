@@ -137,3 +137,16 @@ The overview shows done/total, available work count, progress, a horizontally sc
 Add/Edit opens a native modal dialog with initial focus, focus containment and Escape handling. The dialog owns a working copy. Apply validates it and updates only the browser draft; Cancel/Escape discard unapplied changes. New tasks are not inserted until Apply. Task editing, status/priority/date/criteria/note/dependencies are inside the dialog; archive/restore and timer actions remain available on the overview. Save remains an explicit separate Drive operation. The task time accumulated outside a dialog is preserved on Apply. JSON and API do not change.
 
 The dependency layout is in src/plugins/work-manager/dependency-layout.ts; the graph component is client/plugins/work-manager/DependencyGraph.tsx. Browser acceptance covers cancel add/edit, apply add/edit, dependencies, graph/progress, Drive Save/reload and Escape. Responsive CSS has a single-column breakpoint; mobile viewport acceptance is still separate.
+
+## Overview of all projects (rc.18)
+
+A document named `*.work-overview.md` shows the open work of every project on one page: overdue tasks, tasks in progress, tasks that can start now, and the progress of each project. It stores nothing; optional front matter `title` and `description` and the Markdown body are shown above the lists.
+
+```markdown
+---
+title: Today
+---
+Open work across all projects.
+```
+
+`GET /api/work-manager/overview` returns, for every YAML-declared project in document-path order, `id`, `title`, `path`, `state` (`ready`, `empty` when never saved, `archived`, `invalid`), `progress` and the open tasks with `readiness`. It needs the session cookie, reads the projects one at a time inside one work slot and never writes. A storage outage fails the whole request with `storage_unavailable`; one damaged project is reported as `invalid` without hiding the others. "Overdue" is decided in the browser from the user's calendar day.

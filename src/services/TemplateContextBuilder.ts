@@ -95,8 +95,7 @@ export class TemplateContextBuilder {
       js.push('/__kb/live.js');
     }
 
-    const entries = (this.options.plugins || []).flatMap(plugin => {
-      const entry = plugin.clientEntry;
+    const entries = (this.options.plugins || []).flatMap(plugin => [plugin.clientEntry, ...(plugin.clientEntries || [])].flatMap(entry => {
       const container = entry && /^data-[a-z0-9-]+$/.test(entry.marker)
         ? new RegExp(`<[^>]+\\s${entry.marker}(?=[\\s=>])`, 'i') : undefined;
       if (!entry || !container?.test(html)) return [];
@@ -110,7 +109,7 @@ export class TemplateContextBuilder {
         css.push(`${base}/${entry.cssFile}`);
       }
       return [`${base}/${entry.file}`];
-    });
+    }));
     js.push(...entries);
     return {
       base: assetBase,

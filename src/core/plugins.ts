@@ -91,6 +91,8 @@ export interface KnowledgeBasePlugin {
    * assetsDir names a file inside that directory.
    */
   clientEntry?: { file: string; marker: string; cssFile?: string };
+  /** Further entries with their own markers, for a plugin with more than one kind of page. */
+  clientEntries?: Array<{ file: string; marker: string; cssFile?: string }>;
   /** Absolute directory served at /plugin-assets/<id>/ (after authentication) and copied by static builds. */
   assetsDir?: string;
   /** marked extensions applied to every Markdown render (custom syntax, tokenizers, renderers). */
@@ -99,6 +101,8 @@ export interface KnowledgeBasePlugin {
   transformPage?: (page: RenderedContent, context: PluginPageContext) => Promise<RenderedContent | void> | RenderedContent | void;
   /** Extra documents for the search index. A failure here is logged and never breaks search. */
   searchDocuments?: (context: PluginSearchContext) => Promise<PluginSearchDocument[]> | PluginSearchDocument[];
+  /** Called on a server when content files change, so a plugin can drop what it derived from them. */
+  onContentChange?: (relativePath: string | null) => void;
   /** Storage provider ids this plugin reads or writes; reported by name in "kb doctor". */
   requiresStorage?: string[];
   /** Runs before all content, API and static routes. At most one authentication provider. */

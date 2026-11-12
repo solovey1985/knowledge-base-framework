@@ -5,7 +5,9 @@ import { KnowledgeBasePlugin } from '../../core/plugins';
 import { StorageError } from '../../core/storage';
 import { exactObject, WorkManagerError } from './model';
 import { WorkManagerService } from './service';
-import { parseProjectMetadata, ProjectCatalog, WORK_MANAGER_SUFFIX } from './content-metadata';
+import { parseProjectMetadata, ProjectCatalog, WORK_MANAGER_SUFFIX, WORK_OVERVIEW_SUFFIX } from './content-metadata';
+import { projectProgress, taskReadiness } from './planning';
+import { splitFrontMatter } from '../../core/frontMatter';
 import { validateProject } from './model';
 
 export interface WorkManagerOptions {
@@ -33,6 +35,7 @@ export function workManagerPlugin(options: WorkManagerOptions): KnowledgeBasePlu
   return {
     id: 'work-manager',
     clientEntry: { file: 'kb-plugin-work-manager.js', cssFile: 'kb-icons-work-manager.css', marker: 'data-work-manager' }, requiresAuthentication: true,
+    clientEntries: [{ file: 'kb-plugin-work-overview.js', cssFile: 'kb-icons-work-manager.css', marker: 'data-work-overview' }],
     requiresStorage: [providerId],
     contentRenderers: [{
       id: 'work-manager-page',
@@ -47,6 +50,22 @@ export function workManagerPlugin(options: WorkManagerOptions): KnowledgeBasePlu
       },
       renderDirectoryItem({ friendlyHref }) {
         return { href: friendlyHref, meta: 'Проєкти та задачі' };
+      },
+    }, {
+      // One document shows open work across every project; it stores nothing itself.
+      id: 'work-overview-page',
+      matches: requestPath => requestPath.endsWith(WORK_OVERVIEW_SUFFIX),
+      async render(context) {
+        const { data, body } = splitFrontMatter(await context.readFile(context.requestPath));
+        const text = (value: unknown, fallback: string) => typeof value === 'string' && value.trim() ? value.trim() : fallback;
+        const introduction = await context.renderMarkdown(body, context.requestPath);
+        const title = text(data.title, 'Огляд задач');
+        const heading = title.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+        return context.composeContentResponse(context.requestPath, title,
+          `<h1>${heading}</h1>${introduction.html}<div data-work-overview></div>`, text(data.description, 'Відкриті задачі всіх проєктів'));
+      },
+      renderDirectoryItem({ friendlyHref }) {
+        return { href: friendlyHref, meta: 'Огляд задач' };
       },
     }],
     setupServer(app, context) {
@@ -115,6 +134,29 @@ export function workManagerPlugin(options: WorkManagerOptions): KnowledgeBasePlu
         }
         return service.list({ cursor: req.query.cursor as string | undefined, archived: req.query.archived === 'true' });
       }, 200, true));
+      // Read-only summary of open work. Projects are read one at a time within a single work slot.
+      router.get('/overview', route(async () => {
+        const projects = [];
+        for (const entry of await catalog.all()) {
+          const base = { id: entry.id, title: entry.title, path: entry.path };
+          try {
+            const { project, archived } = await service.read(entry.id);
+            projects.push({ ...base, state: archived ? 'archived' : 'ready', progress: projectProgress(project.tasks),
+              tasks: archived ? [] : project.tasks.filter(task => !task.archived && task.status !== 'done').map(task => ({
+                id: task.id, title: task.title, status: task.status, priority: task.priority, dueDate: task.dueDate,
+                spentMinutes: task.spentMinutes, readiness: taskReadiness(task, project.tasks) })) });
+          } catch (error) {
+            // A project that was never saved has no tasks yet; a storage outage fails the whole request.
+            if (error instanceof StorageError && error.code === 'not_found') {
+              projects.push({ ...base, state: 'empty', progress: projectProgress([]), tasks: [] });
+            } else if (error instanceof WorkManagerError || (error instanceof StorageError &&
+              ['invalid_document', 'unsupported_version', 'too_large'].includes(error.code))) {
+              projects.push({ ...base, state: 'invalid', progress: projectProgress([]), tasks: [] });
+            } else throw error;
+          }
+        }
+        return { projects };
+      }));
       router.post('/projects/prepare', route(async req => {
         const b = body(req, ['operationId', 'project']);
         return service.prepare(b.operationId as string, await boundProject(b.project));

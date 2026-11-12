@@ -442,3 +442,41 @@ test('manual task time adds whole units and formats day/hour boundaries', () => 
     assert.ok(Number.isNaN(manualMinutes('', '', invalid)));
   }
 });
+
+test('overview lists open work of every declared project and loads only on its own page', async t => {
+  const { store, request, create, root } = await fixture(t);
+  fs.mkdirSync(path.join(root, 'house'));
+  fs.writeFileSync(path.join(root, 'house', 'plan.work-manager.md'), '---\nid: house\ntitle: Будинок\ndescription: \"\"\n---\n');
+  fs.writeFileSync(path.join(root, 'today.work-overview.md'), '---\ntitle: Мій огляд\n---\nВступ.');
+  const alpha = { ...project(), tasks: [
+    { ...task('a'), status: 'done' }, { ...task('b', ['a']), priority: 'high', dueDate: '2020-01-01', spentMinutes: 30 },
+    { ...task('c', ['b']) }, { ...task('d'), archived: true }] };
+  assert.equal((await create(alpha)).status, 201);
+
+  const overview = await request('GET', '/overview');
+  assert.equal(overview.status, 200);
+  assert.equal(overview.headers['cache-control'], 'private, no-store');
+  assert.deepEqual(overview.body.projects.map(item => [item.id, item.path, item.state]),
+    [['alpha', 'alpha.work-manager.md', 'ready'], ['house', 'house/plan.work-manager.md', 'empty']]);
+  const [first] = overview.body.projects;
+  assert.deepEqual(first.progress, { done: 1, total: 3, percent: 33 });
+  assert.deepEqual(first.tasks, [
+    { id: 'b', title: 'b', status: 'todo', priority: 'high', dueDate: '2020-01-01', spentMinutes: 30, readiness: 'ready' },
+    { id: 'c', title: 'c', status: 'todo', priority: 'normal', dueDate: null, spentMinutes: 0, readiness: 'blocked' }]);
+  assert.equal((await request('GET', '/overview?x=1')).status, 400);
+  assert.equal((await request('GET', '/overview', undefined, { Cookie: '' })).status, 401);
+  store.fault = 'unavailable';
+  assert.deepEqual((await request('GET', '/overview')).body, { error: { code: 'storage_unavailable' } });
+  store.fault = undefined;
+
+  const kb = new KnowledgeBase({ contentRootPath: root, plugins: [passwordAuthPlugin({ allowInsecureLocalhost: true }),
+    { id: 'storage', storageProviders: [store] }, workManagerPlugin({ storageProviderId: 'drive' })] });
+  const page = await kb.renderContent('today.work-overview.md');
+  assert.equal(page.title, 'Мій огляд');
+  assert.match(page.htmlContent, /Вступ\.[\s\S]*<div data-work-overview><\/div>/);
+  const { TemplateContextBuilder } = require('../lib/services/TemplateContextBuilder');
+  const scripts = content => new TemplateContextBuilder(kb.getOptions()).build(content).assets.js;
+  assert.ok(scripts(page).some(src => src.endsWith('/kb-plugin-work-overview.js')));
+  assert.ok(!scripts(page).some(src => src.endsWith('/kb-plugin-work-manager.js')));
+  assert.ok(!scripts(await kb.renderContent('note.md')).some(src => /work-(overview|manager)/.test(src)));
+});

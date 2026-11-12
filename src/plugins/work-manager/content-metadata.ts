@@ -6,6 +6,8 @@ import { exactObject, validId, WorkManagerError } from './model';
 
 export interface ProjectMetadata { id: string; title: string; description: string }
 export const WORK_MANAGER_SUFFIX = '.work-manager.md';
+export const WORK_OVERVIEW_SUFFIX = '.work-overview.md';
+export interface ProjectEntry extends ProjectMetadata { /** Content-relative path of the project document. */ path: string }
 
 /** YAML is configuration/data only: no custom tags, aliases, duplicate keys or executable types. */
 export function parseProjectMetadata(raw: string): { metadata: ProjectMetadata; body: string } {
@@ -28,7 +30,14 @@ export class ProjectCatalog {
 
   async get(id: string): Promise<ProjectMetadata> {
     if (!validId(id)) throw new WorkManagerError('invalid_request');
-    const entries = new Map<string, ProjectMetadata>();
+    const entry = (await this.all()).find(item => item.id === id);
+    if (!entry) throw new StorageError('not_found');
+    return { id: entry.id, title: entry.title, description: entry.description };
+  }
+
+  /** Every declared project with its document path, ordered by path. */
+  async all(): Promise<ProjectEntry[]> {
+    const entries = new Map<string, ProjectEntry>();
     let count = 0;
     const scan = async (directory: string, depth: number): Promise<void> => {
       if (depth > 32) throw new WorkManagerError('invalid_project');
@@ -41,13 +50,11 @@ export class ProjectCatalog {
           if ((await fs.stat(file)).size > 1024 * 1024) throw new WorkManagerError('too_large');
           const { metadata } = parseProjectMetadata(await fs.readFile(file, 'utf8'));
           if (entries.has(metadata.id)) throw new StorageError('conflict');
-          entries.set(metadata.id, metadata);
+          entries.set(metadata.id, { ...metadata, path: path.relative(this.root, file).split(path.sep).join('/') });
         }
       }
     };
     await scan(this.root, 0);
-    const metadata = entries.get(id);
-    if (!metadata) throw new StorageError('not_found');
-    return metadata;
+    return [...entries.values()].sort((a, b) => a.path < b.path ? -1 : a.path > b.path ? 1 : 0);
   }
 }
