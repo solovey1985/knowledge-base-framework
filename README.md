@@ -2,6 +2,15 @@
 
 A flexible, Node.js-based framework for building markdown-based knowledge bases and documentation portals with support for Mermaid diagrams, LaTeX math, and syntax highlighting.
 
+Implementation follow-up: [To-Do — alignment with Second Brain](TODO.md).
+
+Projects can configure `server.entrypoint` as a path to a CommonJS module exporting
+`startServer()`. `kb serve` invokes it before loading plugins, allowing project-owned
+local setup. `kb update` aligns the project dependency with the global CLI version
+and preserves existing `server.js`, `build.js`, and `README.md` when this option is
+set. Configuration and existing plugin settings are retained. Entrypoints are
+trusted local project code; only use this option in trusted repositories.
+
 ## Features
 
 - 📝 **Markdown Support** - Full CommonMark and GitHub Flavored Markdown
@@ -334,3 +343,12 @@ MIT
 3. Commit your changes
 4. Push to the branch
 5. Create a Pull Request
+
+## Optional password protection
+
+See [Password authentication](PASSWORD_AUTH.md) for plugin configuration, 14-day sessions, migration from legacy auth, tests and deployment gates.
+
+See [Google Drive storage](GOOGLE_DRIVE_STORAGE.md) for the optional server storage provider,
+workspace isolation, operation tickets, configuration, verified backups and recovery.
+
+Optional server application: [Work Manager API](WORK_MANAGER.md) (requires authentication and a dedicated storage provider).

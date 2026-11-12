@@ -1,0 +1,394 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Tech Memory Collapsible Panels Demo</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          boxShadow: {
+            soft: '0 20px 45px -20px rgba(15, 23, 42, 0.25)'
+          }
+        }
+      }
+    };
+  </script>
+</head>
+<body class="min-h-screen bg-slate-100 text-slate-900">
+  <div class="mx-auto max-w-6xl px-4 py-6 sm:px-6 lg:px-8">
+    <header class="rounded-[2rem] border border-slate-200 bg-white p-6 shadow-soft sm:p-8">
+      <div class="flex flex-wrap items-start justify-between gap-4">
+        <div class="max-w-3xl">
+          <p class="text-xs font-semibold uppercase tracking-[0.3em] text-sky-700">Tech Memory Mock</p>
+          <h1 class="mt-3 text-3xl font-semibold tracking-tight text-slate-900">Collapsible Concept Panels</h1>
+          <p class="mt-4 text-sm leading-7 text-slate-600">
+            This mock shows the concept-card layout using collapsible panels instead of a row of reveal buttons.
+            Open it directly in a browser and check how the structure feels for study and recall.
+          </p>
+        </div>
+        <div class="flex flex-wrap gap-2">
+          <button type="button" id="toggleRecallMode" class="rounded-full border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 transition hover:border-sky-300 hover:text-sky-700">
+            Recall mode: off
+          </button>
+          <button type="button" id="resetPage" class="rounded-full border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 transition hover:border-rose-300 hover:text-rose-700">
+            Reset progress
+          </button>
+        </div>
+      </div>
+
+      <div id="progress" class="mt-6 rounded-[1.75rem] border border-slate-200 bg-gradient-to-br from-sky-50 to-indigo-50 p-5"></div>
+    </header>
+
+    <main class="mt-6 space-y-6">
+      <article id="concept-promise" data-card="promise" class="rounded-[2rem] border border-slate-200 bg-white p-6 shadow-soft sm:p-8">
+        <div class="flex flex-wrap items-start justify-between gap-4">
+          <div>
+            <p class="text-xs font-semibold uppercase tracking-[0.3em] text-sky-700">Core concept</p>
+            <div class="mt-3 flex items-start gap-3">
+              <span class="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-violet-200 bg-violet-50 text-violet-700">
+                <svg aria-hidden="true" viewBox="0 0 24 24" class="h-5 w-5 fill-none stroke-current" stroke-width="1.8"><circle cx="12" cy="5" r="2.5" stroke-linecap="round" stroke-linejoin="round"/><circle cx="5" cy="19" r="2.5" stroke-linecap="round" stroke-linejoin="round"/><circle cx="19" cy="19" r="2.5" stroke-linecap="round" stroke-linejoin="round"/><path d="M10.2 6.9L6.8 16.3" stroke-linecap="round" stroke-linejoin="round"/><path d="M13.8 6.9l3.4 9.4" stroke-linecap="round" stroke-linejoin="round"/><path d="M7.5 19h9" stroke-linecap="round" stroke-linejoin="round"/></svg>
+              </span>
+              <div>
+                <h2 class="text-3xl font-semibold tracking-tight text-slate-900">Promise</h2>
+                <p class="mt-2 text-sm text-slate-500">Aliases: JavaScript Promise, async result wrapper</p>
+              </div>
+            </div>
+          </div>
+          <span data-status-badge class="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-medium text-slate-500">New</span>
+        </div>
+
+        <div class="mt-5 flex flex-wrap gap-2 text-sm">
+          <span class="rounded-full border border-indigo-200 bg-indigo-50 px-3 py-1 text-indigo-700">Parent: Asynchronous Programming</span>
+          <span class="rounded-full border border-indigo-200 bg-indigo-50 px-3 py-1 text-indigo-700">Parent: Event Loop</span>
+          <a href="#concept-state" class="rounded-full border border-sky-200 bg-sky-50 px-3 py-1 text-sky-700 transition hover:border-sky-300">Child: Promise State</a>
+          <span class="rounded-full border border-violet-200 bg-violet-50 px-3 py-1 text-violet-700">Related: async/await</span>
+          <span class="rounded-full border border-violet-200 bg-violet-50 px-3 py-1 text-violet-700">Related: Microtask Queue</span>
+        </div>
+
+        <div class="mt-6 space-y-3" data-sections>
+          <section class="overflow-hidden rounded-3xl border border-slate-200 bg-slate-50" data-panel="summary">
+            <button type="button" class="flex w-full items-center justify-between gap-4 px-5 py-4 text-left" data-toggle>
+              <span>
+                <span class="block text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">Summary</span>
+                <span class="mt-1 block text-sm text-slate-600">Short definition first</span>
+              </span>
+              <span class="chevron rounded-full border border-slate-200 bg-white p-2 text-slate-500 transition">
+                <svg viewBox="0 0 20 20" class="h-4 w-4 fill-none stroke-current" stroke-width="1.8"><path d="M5 8l5 5 5-5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+              </span>
+            </button>
+            <div class="panel-content border-t border-slate-200 px-5 py-4 text-sm leading-7 text-slate-700">
+              A <code class="rounded bg-slate-200 px-1.5 py-0.5 text-xs">Promise</code> is an object that represents the eventual completion or failure of an asynchronous operation.
+            </div>
+          </section>
+
+          <section class="overflow-hidden rounded-3xl border border-slate-200 bg-slate-50" data-panel="details">
+            <button type="button" class="flex w-full items-center justify-between gap-4 px-5 py-4 text-left" data-toggle>
+              <span>
+                <span class="block text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">Details</span>
+                <span class="mt-1 block text-sm text-slate-600">Broader explanation and behavior</span>
+              </span>
+              <span class="chevron rounded-full border border-slate-200 bg-white p-2 text-slate-500 transition">
+                <svg viewBox="0 0 20 20" class="h-4 w-4 fill-none stroke-current" stroke-width="1.8"><path d="M5 8l5 5 5-5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+              </span>
+            </button>
+            <div class="panel-content hidden border-t border-slate-200 px-5 py-4 text-sm leading-7 text-slate-700">
+              <p>Promises improve readability and composition compared with deeply nested callbacks.</p>
+              <p class="mt-3">They let asynchronous work be chained, transformed, and handled consistently through success and failure branches.</p>
+            </div>
+          </section>
+
+          <section class="overflow-hidden rounded-3xl border border-slate-200 bg-slate-50" data-panel="example">
+            <button type="button" class="flex w-full items-center justify-between gap-4 px-5 py-4 text-left" data-toggle>
+              <span>
+                <span class="block text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">Example</span>
+                <span class="mt-1 block text-sm text-slate-600">Concrete usage</span>
+              </span>
+              <span class="chevron rounded-full border border-slate-200 bg-white p-2 text-slate-500 transition">
+                <svg viewBox="0 0 20 20" class="h-4 w-4 fill-none stroke-current" stroke-width="1.8"><path d="M5 8l5 5 5-5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+              </span>
+            </button>
+            <div class="panel-content hidden border-t border-slate-200 px-5 py-4">
+              <pre class="overflow-x-auto rounded-2xl bg-slate-950 p-4 text-sm text-slate-100"><code>fetch('/api/data')
+  .then(response =&gt; response.json())
+  .then(data =&gt; console.log(data))
+  .catch(error =&gt; console.error(error));</code></pre>
+            </div>
+          </section>
+
+          <section class="overflow-hidden rounded-3xl border border-emerald-200 bg-emerald-50" data-panel="mnemonic">
+            <button type="button" class="flex w-full items-center justify-between gap-4 px-5 py-4 text-left" data-toggle>
+              <span>
+                <span class="block text-xs font-semibold uppercase tracking-[0.2em] text-emerald-700">Mnemonic</span>
+                <span class="mt-1 block text-sm text-slate-600">Memory aid</span>
+              </span>
+              <span class="chevron rounded-full border border-emerald-200 bg-white p-2 text-emerald-700 transition">
+                <svg viewBox="0 0 20 20" class="h-4 w-4 fill-none stroke-current" stroke-width="1.8"><path d="M5 8l5 5 5-5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+              </span>
+            </button>
+            <div class="panel-content hidden border-t border-emerald-200 px-5 py-4 text-sm leading-7 text-slate-700">
+              Think of a Promise as a sealed envelope for a result that will be delivered later.
+            </div>
+          </section>
+
+          <section class="overflow-hidden rounded-3xl border border-amber-200 bg-amber-50" data-panel="recall">
+            <button type="button" class="flex w-full items-center justify-between gap-4 px-5 py-4 text-left" data-toggle>
+              <span>
+                <span class="block text-xs font-semibold uppercase tracking-[0.2em] text-amber-700">Recall prompts</span>
+                <span class="mt-1 block text-sm text-slate-600">Questions for active recall</span>
+              </span>
+              <span class="chevron rounded-full border border-amber-200 bg-white p-2 text-amber-700 transition">
+                <svg viewBox="0 0 20 20" class="h-4 w-4 fill-none stroke-current" stroke-width="1.8"><path d="M5 8l5 5 5-5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+              </span>
+            </button>
+            <div class="panel-content hidden border-t border-amber-200 px-5 py-4 text-sm leading-7 text-slate-700">
+              <ul class="list-disc space-y-2 pl-5">
+                <li>What does a Promise represent?</li>
+                <li>Why is it better than raw nested callbacks?</li>
+                <li>Which concepts sit directly below it?</li>
+              </ul>
+            </div>
+          </section>
+        </div>
+
+        <div class="mt-6 flex flex-wrap gap-2">
+          <button type="button" data-status="known" class="rounded-full bg-emerald-500 px-4 py-2 text-sm font-medium text-white transition hover:bg-emerald-600">Mark known</button>
+          <button type="button" data-status="review" class="rounded-full bg-amber-500 px-4 py-2 text-sm font-medium text-white transition hover:bg-amber-600">Review later</button>
+          <button type="button" data-reset-card class="rounded-full border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 transition hover:border-rose-300 hover:text-rose-700">Reset card</button>
+        </div>
+      </article>
+
+      <article id="concept-state" data-card="promise-state" class="rounded-[2rem] border border-slate-200 bg-white p-6 shadow-soft sm:p-8">
+        <div class="flex flex-wrap items-start justify-between gap-4">
+          <div>
+            <p class="text-xs font-semibold uppercase tracking-[0.3em] text-sky-700">Lifecycle</p>
+            <div class="mt-3 flex items-start gap-3">
+              <span class="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-violet-200 bg-violet-50 text-violet-700">
+                <svg aria-hidden="true" viewBox="0 0 24 24" class="h-5 w-5 fill-none stroke-current" stroke-width="1.8"><circle cx="12" cy="5" r="2.5" stroke-linecap="round" stroke-linejoin="round"/><circle cx="5" cy="19" r="2.5" stroke-linecap="round" stroke-linejoin="round"/><circle cx="19" cy="19" r="2.5" stroke-linecap="round" stroke-linejoin="round"/><path d="M10.2 6.9L6.8 16.3" stroke-linecap="round" stroke-linejoin="round"/><path d="M13.8 6.9l3.4 9.4" stroke-linecap="round" stroke-linejoin="round"/><path d="M7.5 19h9" stroke-linecap="round" stroke-linejoin="round"/></svg>
+              </span>
+              <div>
+                <h2 class="text-3xl font-semibold tracking-tight text-slate-900">Promise State</h2>
+                <p class="mt-2 text-sm text-slate-500">Pending, fulfilled, rejected</p>
+              </div>
+            </div>
+          </div>
+          <span data-status-badge class="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-medium text-slate-500">New</span>
+        </div>
+
+        <div class="mt-5 flex flex-wrap gap-2 text-sm">
+          <a href="#concept-promise" class="rounded-full border border-indigo-200 bg-indigo-50 px-3 py-1 text-indigo-700 transition hover:border-indigo-300">Parent: Promise</a>
+          <span class="rounded-full border border-sky-200 bg-sky-50 px-3 py-1 text-sky-700">Child: Pending</span>
+          <span class="rounded-full border border-sky-200 bg-sky-50 px-3 py-1 text-sky-700">Child: Fulfilled</span>
+          <span class="rounded-full border border-sky-200 bg-sky-50 px-3 py-1 text-sky-700">Child: Rejected</span>
+        </div>
+
+        <div class="mt-6 space-y-3" data-sections>
+          <section class="overflow-hidden rounded-3xl border border-slate-200 bg-slate-50" data-panel="summary">
+            <button type="button" class="flex w-full items-center justify-between gap-4 px-5 py-4 text-left" data-toggle>
+              <span>
+                <span class="block text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">Summary</span>
+                <span class="mt-1 block text-sm text-slate-600">The three states at a glance</span>
+              </span>
+              <span class="chevron rounded-full border border-slate-200 bg-white p-2 text-slate-500 transition">
+                <svg viewBox="0 0 20 20" class="h-4 w-4 fill-none stroke-current" stroke-width="1.8"><path d="M5 8l5 5 5-5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+              </span>
+            </button>
+            <div class="panel-content border-t border-slate-200 px-5 py-4 text-sm leading-7 text-slate-700">
+              A Promise can be <strong>pending</strong>, <strong>fulfilled</strong>, or <strong>rejected</strong>.
+            </div>
+          </section>
+
+          <section class="overflow-hidden rounded-3xl border border-slate-200 bg-slate-50" data-panel="details">
+            <button type="button" class="flex w-full items-center justify-between gap-4 px-5 py-4 text-left" data-toggle>
+              <span>
+                <span class="block text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">Details</span>
+                <span class="mt-1 block text-sm text-slate-600">One-way lifecycle</span>
+              </span>
+              <span class="chevron rounded-full border border-slate-200 bg-white p-2 text-slate-500 transition">
+                <svg viewBox="0 0 20 20" class="h-4 w-4 fill-none stroke-current" stroke-width="1.8"><path d="M5 8l5 5 5-5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+              </span>
+            </button>
+            <div class="panel-content hidden border-t border-slate-200 px-5 py-4 text-sm leading-7 text-slate-700">
+              A Promise begins as pending and can transition only once to fulfilled or rejected. Once settled, it cannot switch to another state later.
+            </div>
+          </section>
+
+          <section class="overflow-hidden rounded-3xl border border-amber-200 bg-amber-50" data-panel="recall">
+            <button type="button" class="flex w-full items-center justify-between gap-4 px-5 py-4 text-left" data-toggle>
+              <span>
+                <span class="block text-xs font-semibold uppercase tracking-[0.2em] text-amber-700">Recall prompts</span>
+                <span class="mt-1 block text-sm text-slate-600">Quick self-checks</span>
+              </span>
+              <span class="chevron rounded-full border border-amber-200 bg-white p-2 text-amber-700 transition">
+                <svg viewBox="0 0 20 20" class="h-4 w-4 fill-none stroke-current" stroke-width="1.8"><path d="M5 8l5 5 5-5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+              </span>
+            </button>
+            <div class="panel-content hidden border-t border-amber-200 px-5 py-4 text-sm leading-7 text-slate-700">
+              <ul class="list-disc space-y-2 pl-5">
+                <li>Which state comes first?</li>
+                <li>Can a fulfilled Promise become rejected later?</li>
+                <li>What does settled mean?</li>
+              </ul>
+            </div>
+          </section>
+        </div>
+
+        <div class="mt-6 flex flex-wrap gap-2">
+          <button type="button" data-status="known" class="rounded-full bg-emerald-500 px-4 py-2 text-sm font-medium text-white transition hover:bg-emerald-600">Mark known</button>
+          <button type="button" data-status="review" class="rounded-full bg-amber-500 px-4 py-2 text-sm font-medium text-white transition hover:bg-amber-600">Review later</button>
+          <button type="button" data-reset-card class="rounded-full border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 transition hover:border-rose-300 hover:text-rose-700">Reset card</button>
+        </div>
+      </article>
+    </main>
+  </div>
+
+  <script>
+    const storageKey = 'kb.tech-memory.collapsible-demo';
+    const cards = Array.from(document.querySelectorAll('[data-card]'));
+    const progress = document.getElementById('progress');
+    const recallModeButton = document.getElementById('toggleRecallMode');
+    const resetPageButton = document.getElementById('resetPage');
+
+    const defaultState = {
+      recallMode: false,
+      items: Object.fromEntries(cards.map(card => [card.dataset.card, { status: 'new', sections: { summary: true } }]))
+    };
+
+    const state = loadState();
+    render();
+
+    recallModeButton.addEventListener('click', () => {
+      state.recallMode = !state.recallMode;
+      if (state.recallMode) {
+        cards.forEach(card => {
+          state.items[card.dataset.card].sections = {};
+        });
+      } else {
+        cards.forEach(card => {
+          const sections = state.items[card.dataset.card].sections;
+          if (Object.keys(sections).length === 0) {
+            sections.summary = true;
+          }
+        });
+      }
+      saveState();
+      render();
+    });
+
+    resetPageButton.addEventListener('click', () => {
+      localStorage.removeItem(storageKey);
+      Object.assign(state, clone(defaultState));
+      render();
+    });
+
+    function render() {
+      let known = 0;
+      let review = 0;
+
+      cards.forEach(card => {
+        const id = card.dataset.card;
+        const itemState = state.items[id] || { status: 'new', sections: { summary: true } };
+        state.items[id] = itemState;
+
+        if (itemState.status === 'known') known += 1;
+        if (itemState.status === 'review') review += 1;
+
+        renderCard(card, itemState);
+      });
+
+      const total = cards.length;
+      const covered = known + review;
+      const percent = Math.round((covered / total) * 100);
+
+      recallModeButton.textContent = `Recall mode: ${state.recallMode ? 'on' : 'off'}`;
+      progress.innerHTML = `
+        <div class="flex flex-wrap items-start justify-between gap-4">
+          <div>
+            <div class="text-xs font-semibold uppercase tracking-[0.2em] text-sky-700">Progress</div>
+            <div class="mt-2 text-2xl font-semibold tracking-tight text-slate-900">${covered} of ${total} concepts reviewed</div>
+            <p class="mt-2 text-sm text-slate-600">Collapsible panels reduce control noise while keeping the concept layered and interactive.</p>
+          </div>
+          <div class="flex flex-wrap gap-2 text-sm">
+            <span class="rounded-full border border-slate-200 bg-white px-3 py-1 text-slate-600">${percent}% covered</span>
+            <span class="rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-emerald-700">Known: ${known}</span>
+            <span class="rounded-full border border-amber-200 bg-amber-50 px-3 py-1 text-amber-700">Review: ${review}</span>
+          </div>
+        </div>
+        <div class="mt-4 h-3 overflow-hidden rounded-full bg-white/80">
+          <div class="h-full rounded-full bg-gradient-to-r from-sky-500 to-indigo-500 transition-all" style="width: ${percent}%"></div>
+        </div>
+      `;
+
+      saveState();
+    }
+
+    function renderCard(card, itemState) {
+      const badge = card.querySelector('[data-status-badge]');
+      if (itemState.status === 'known') {
+        badge.className = 'rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-medium text-emerald-700';
+        badge.textContent = 'Known';
+      } else if (itemState.status === 'review') {
+        badge.className = 'rounded-full border border-amber-200 bg-amber-50 px-3 py-1 text-xs font-medium text-amber-700';
+        badge.textContent = 'Review';
+      } else {
+        badge.className = 'rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-medium text-slate-500';
+        badge.textContent = 'New';
+      }
+
+      card.querySelectorAll('[data-panel]').forEach(panel => {
+        const name = panel.dataset.panel;
+        const isOpen = Boolean(itemState.sections[name]);
+        const content = panel.querySelector('.panel-content');
+        const chevron = panel.querySelector('.chevron');
+        content.classList.toggle('hidden', !isOpen);
+        chevron.classList.toggle('rotate-180', isOpen);
+      });
+
+      card.querySelectorAll('[data-toggle]').forEach(toggle => {
+        toggle.onclick = () => {
+          const panel = toggle.closest('[data-panel]');
+          const name = panel.dataset.panel;
+          itemState.sections[name] = !itemState.sections[name];
+          if (!state.recallMode && Object.keys(itemState.sections).length === 0) {
+            itemState.sections.summary = true;
+          }
+          render();
+        };
+      });
+
+      card.querySelectorAll('[data-status]').forEach(button => {
+        button.onclick = () => {
+          itemState.status = button.dataset.status;
+          render();
+        };
+      });
+
+      card.querySelector('[data-reset-card]').onclick = () => {
+        itemState.status = 'new';
+        itemState.sections = state.recallMode ? {} : { summary: true };
+        render();
+      };
+    }
+
+    function loadState() {
+      try {
+        const raw = localStorage.getItem(storageKey);
+        if (!raw) return clone(defaultState);
+        return Object.assign(clone(defaultState), JSON.parse(raw));
+      } catch (_error) {
+        return clone(defaultState);
+      }
+    }
+
+    function saveState() {
+      localStorage.setItem(storageKey, JSON.stringify(state));
+    }
+
+    function clone(value) {
+      return JSON.parse(JSON.stringify(value));
+    }
+  </script>
+</body>
+</html>
