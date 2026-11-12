@@ -139,7 +139,8 @@ async function initProject(projectName?: string): Promise<void> {
     const readmeTpl = await renderTemplate('README.template.md', { PROJECT_NAME: name } as any);
     await fs.writeFile(path.join(projectDir, 'README.md'), readmeTpl);
 
-    await copyFrameworkAssets(projectDir, 'assets');
+    // Project assets only: the framework serves its own from the installed package.
+    await fs.mkdir(path.join(projectDir, 'assets'), { recursive: true });
 
     console.log('✅ Project created successfully!');
     console.log('\nNext steps:');
@@ -228,12 +229,8 @@ async function updateProject(args: string[] = []): Promise<void> {
         }
 
         if (dryRun) {
-            console.log('  would refresh framework files in assets/ (kb-*)');
             return;
         }
-        await copyFrameworkAssets(projectDir, 'assets');
-        console.log('  ✔ assets/');
-
         console.log('✅ Project files updated. Review git changes before committing.');
     } catch (error) {
         handleConfigError(error);
@@ -242,7 +239,7 @@ async function updateProject(args: string[] = []): Promise<void> {
 
 async function serveProject(args: string[]): Promise<void> {
     try {
-        const flags = parseFlags(args, ['config', 'port', 'host', 'plugins']);
+        const flags = parseFlags(args, ['config', 'port', 'host', 'plugins', 'watch'], ['watch']);
         if (flags.port && !/^\d{1,5}$/.test(flags.port)) throw new ConfigError('Option --port needs a number.');
         const { config, path: configPath } = await loadConfigFile(flags.config);
         // An explicit project entrypoint can prepare local credentials and plugins
@@ -260,7 +257,8 @@ async function serveProject(args: string[]): Promise<void> {
             configPath,
             pluginsConfigPath: flags.plugins,
             port: flags.port ? Number(flags.port) : undefined,
-            host: flags.host
+            host: flags.host,
+            liveReload: flags.watch === 'true' ? true : undefined
         });
     } catch (error) {
         handleConfigError(error);
@@ -365,6 +363,7 @@ Options:
     --plugins <file>    Plugin settings file (serve, build). Overrides KB_PLUGINS_CONFIG
     --port <number>     Port (serve). Overrides PORT and server.port
     --host <address>    Bind address (serve). Overrides HOST and server.host
+    --watch             Reload open pages when content changes (serve; never in production)
     --verbose           Show plugin error messages (doctor)
 
 Examples:
@@ -379,14 +378,4 @@ if (require.main === module) {
         console.error(error);
         process.exitCode = 1;
     });
-}
-
-async function copyFrameworkAssets(projectDir: string, destination: string): Promise<void> {
-    const frameworkAssetsDir = path.join(__dirname, '..', '..', 'templates', 'default', 'assets');
-    const targetDir = path.join(projectDir, destination);
-    await fs.mkdir(targetDir, { recursive: true });
-    const entries = await fs.readdir(frameworkAssetsDir);
-    for (const entry of entries) {
-        await fs.copyFile(path.join(frameworkAssetsDir, entry), path.join(targetDir, entry));
-    }
 }

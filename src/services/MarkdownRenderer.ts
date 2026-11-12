@@ -3,6 +3,35 @@ import hljs from 'highlight.js';
 import path from 'path';
 import { TocItem } from '../core/models';
 
+const escapeMath = (value: string): string => value.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+
+/**
+ * Formulas reach the browser exactly as written. Without this, Markdown consumes
+ * TeX escapes such as \\, and turns "_" and "*" into emphasis.
+ */
+const MATH_BLOCK = {
+  name: 'kbMathBlock',
+  level: 'block' as const,
+  start: (source: string) => source.indexOf('$$'),
+  tokenizer(source: string) {
+    const match = /^\$\$([\s\S]+?)\$\$(?:\n|$)/.exec(source);
+    return match ? { type: 'kbMathBlock', raw: match[0], text: match[1] } : undefined;
+  },
+  renderer: (token: { text?: string }) => `<p class="kb-math">$$${escapeMath(token.text || '')}$$</p>\n`
+};
+
+const MATH_INLINE = {
+  name: 'kbMathInline',
+  level: 'inline' as const,
+  start: (source: string) => source.indexOf('$'),
+  tokenizer(source: string) {
+    // Pandoc's rule: no space inside the delimiters, and the closing one is not followed by a digit ("$5 and $10").
+    const match = /^(\$\$?)(?!\s)((?:\\[\s\S]|[^$\\\n])+?)(?<!\s)\1(?!\d)/.exec(source);
+    return match ? { type: 'kbMathInline', raw: match[0], text: match[0] } : undefined;
+  },
+  renderer: (token: { text?: string }) => escapeMath(token.text || '')
+};
+
 export interface MarkdownRendererOptions {
   isStaticSite?: boolean;
   baseUrl?: string;
@@ -30,6 +59,7 @@ export class MarkdownRenderer {
       breaks: false,  // Disable automatic line breaks to prevent math splitting
       gfm: true
     });
+    this.marked.use({ extensions: [MATH_BLOCK, MATH_INLINE] });
     for (const extension of options.extensions || []) {
       this.marked.use(extension);
     }

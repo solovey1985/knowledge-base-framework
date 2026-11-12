@@ -26,6 +26,8 @@ export interface ProjectOptions {
 export interface StartServerOptions extends ProjectOptions {
   port?: number;
   host?: string;
+  /** Reload open pages when content changes. Ignored when NODE_ENV is production. */
+  liveReload?: boolean;
 }
 
 export interface ResolvedProject {
@@ -105,6 +107,9 @@ export function createApp(options: ProjectOptions = {}): Express {
 /** PORT and HOST come from the environment first, so hosting platforms need no code changes. */
 export function startServer(options: StartServerOptions = {}): Server {
   const project = resolveProject(options);
+  if (options.liveReload !== undefined) {
+    project.config = { ...project.config, server: { ...project.config.server, liveReload: options.liveReload } };
+  }
   const app = createApp({ config: project.config, configDir: project.configDir, plugins: project.plugins });
   const port = Number(options.port ?? process.env.PORT ?? project.config.server?.port ?? 3000);
   const host = options.host ?? process.env.HOST ?? project.config.server?.host;

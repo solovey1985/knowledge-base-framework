@@ -13,9 +13,23 @@ export interface NavigationGenerationOptions {
  */
 export class NavigationService {
   private fileService: FileService;
+  /** The tree without active states, per depth. Scanning the content tree on every page is the main render cost. */
+  private treeCache = new Map<number, { tree: Promise<NavigationItem[]>; expires: number }>();
+  /** Upper bound for a cached tree when nothing reports file changes; Infinity for one-pass static builds. */
+  private cacheTtlMs = 3000;
 
   constructor(fileService: FileService) {
     this.fileService = fileService;
+  }
+
+  /** Drop the cached tree; called by the content watcher. */
+  invalidate(): void {
+    this.treeCache.clear();
+  }
+
+  setCacheTtl(milliseconds: number): void {
+    this.cacheTtlMs = milliseconds;
+    this.invalidate();
   }
 
   /**
@@ -114,13 +128,18 @@ export class NavigationService {
    * Generate navigation based on configuration
    */
   async generateNavigation(config: NavigationOptions, currentPath?: string): Promise<NavigationItem[]> {
-    const options: NavigationGenerationOptions = {
-      currentPath,
-      defaultExpanded: false,
-      expandRootLevel: true
-    };
-
-    return this.generateNavigationMenu('', config.maxDepth || 3, 0, currentPath || '', options);
+    const maxDepth = config.maxDepth || 3;
+    const now = Date.now();
+    let cached = this.treeCache.get(maxDepth);
+    if (!cached || cached.expires <= now) {
+      const tree = this.generateNavigationMenu('', maxDepth, 0, '', { defaultExpanded: false, expandRootLevel: true });
+      cached = { tree, expires: now + this.cacheTtlMs };
+      this.treeCache.set(maxDepth, cached);
+      // A failed scan must not be served from the cache.
+      tree.catch(() => { if (this.treeCache.get(maxDepth) === cached) this.treeCache.delete(maxDepth); });
+    }
+    // setActiveStates copies every node, so callers may filter or mutate the result.
+    return this.setActiveStates(await cached.tree, (currentPath || '').split('\\').join('/'));
   }
 
   /**
@@ -207,7 +226,7 @@ export class NavigationService {
    */
   setActiveStates(navigation: NavigationItem[], currentPath: string): NavigationItem[] {
     return navigation.map(item => {
-      const isActive = item.path === currentPath;
+      const isActive = item.path.split('\\').join('/') === currentPath;
       const hasActiveChild = item.children.length > 0 && 
                             this.hasActiveChild(item.children, currentPath);
       

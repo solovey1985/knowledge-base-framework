@@ -14,6 +14,8 @@ import { SearchIndexService } from '../services/SearchIndexService';
 import { PluginManager } from '../services/PluginManager';
 import { StorageRegistry } from './storage';
 import { frontMatterTags, splitFrontMatter } from './frontMatter';
+import { ContentWatcher } from '../services/ContentWatcher';
+import hljs from 'highlight.js';
 
 const IMAGE_EXTENSIONS = new Set(['.png', '.jpg', '.jpeg', '.gif', '.webp', '.bmp', '.svg']);
 const TEXT_PREVIEW_EXTENSIONS = new Set([
@@ -35,6 +37,7 @@ export class KnowledgeBase {
     private templateContextBuilder: TemplateContextBuilder;
     private searchIndexService: SearchIndexService;
     private pluginManager: PluginManager;
+    private contentWatcher?: ContentWatcher;
 
     constructor(options: KnowledgeBaseOptions) {
         this.storage = new StorageRegistry((options.plugins || []).flatMap(plugin => plugin.storageProviders || []));
@@ -55,6 +58,10 @@ export class KnowledgeBase {
         this.options = this.mergeWithDefaults(options);
         this.fileService = new FileService(this.options.contentRootPath);
         this.navigationService = new NavigationService(this.fileService);
+        if (this.options.isStaticSite) {
+            // A build is one pass over unchanging content.
+            this.navigationService.setCacheTtl(Number.POSITIVE_INFINITY);
+        }
         this.markdownRenderer = new MarkdownRenderer({
             isStaticSite: this.options.isStaticSite || false,
             baseUrl: this.options.baseUrl || '',
@@ -136,8 +143,50 @@ export class KnowledgeBase {
         this.securedApps.add(app);
     }
 
+    /** Reports content changes to caches and, when enabled, to open browser tabs. */
+    private watchContent(): ContentWatcher {
+        if (!this.contentWatcher) {
+            this.contentWatcher = new ContentWatcher(this.fileService.getRootPath());
+            this.contentWatcher.onChange(() => this.navigationService.invalidate());
+            this.contentWatcher.start();
+        }
+        return this.contentWatcher;
+    }
+
+    /** Stops file watching. Only needed by hosts that create and discard instances. */
+    close(): void {
+        this.contentWatcher?.close();
+        this.contentWatcher = undefined;
+    }
+
+    private liveReloadEnabled(): boolean {
+        return Boolean(this.options.server?.liveReload) && !this.options.isStaticSite && process.env.NODE_ENV !== 'production';
+    }
+
+    /** Development only: open tabs reload when content changes. Registered after authentication. */
+    private setupLiveReload(app: Express, watcher: ContentWatcher): void {
+        const clients = new Set<Response>();
+        watcher.onChange(() => {
+            for (const client of clients) client.write('event: change\ndata: {}\n\n');
+        });
+        app.get('/__kb/live', (req: Request, res: Response) => {
+            res.writeHead(200, { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-store', Connection: 'keep-alive' });
+            res.write('retry: 1000\n\n');
+            clients.add(res);
+            req.on('close', () => clients.delete(res));
+        });
+        app.get('/__kb/live.js', (_req: Request, res: Response) => {
+            res.type('application/javascript').set('Cache-Control', 'no-store').send(
+                "(function(){var s=new EventSource('/__kb/live');s.addEventListener('change',function(){location.reload();});})();");
+        });
+    }
+
     setupMiddleware(app: Express): void {
         this.setupSecurity(app);
+        const watcher = this.watchContent();
+        if (this.liveReloadEnabled()) {
+            this.setupLiveReload(app, watcher);
+        }
         for (const plugin of this.options.plugins || []) plugin.setupServer?.(app, {
             storage: this.storage, contentRootPath: this.options.contentRootPath,
         });
@@ -205,7 +254,7 @@ export class KnowledgeBase {
 
         // Friendly HTML routes
         app.get('*', async (req: Request, res: Response, next: NextFunction) => {
-            if (req.path.startsWith('/content') || req.path.startsWith('/assets') || req.path.startsWith('/framework-assets') || req.path.startsWith('/plugin-assets')) {
+            if (req.path.startsWith('/content') || req.path.startsWith('/assets') || req.path.startsWith('/framework-assets') || req.path.startsWith('/plugin-assets') || req.path.startsWith('/__kb/')) {
                 return next();
             }
 
@@ -529,7 +578,10 @@ export class KnowledgeBase {
         const extension = path.extname(targetPath).replace('.', '');
         const displayName = path.basename(targetPath);
         const downloadUrl = this.buildRawContentUrl(targetPath);
-        const escaped = this.escapeHtml(rawContent);
+        // Highlighted on the server like Markdown code blocks; the browser needs no highlighter.
+        const escaped = extension && hljs.getLanguage(extension)
+            ? hljs.highlight(rawContent, { language: extension }).value
+            : this.escapeHtml(rawContent);
         const html = `
             <div class="kb-file space-y-6 rounded-3xl border border-slate-200 bg-white p-6 shadow-xl shadow-slate-200/50">
               <header class="kb-file__header flex flex-wrap items-end justify-between gap-4 border-b border-slate-200 pb-5">
@@ -543,7 +595,7 @@ export class KnowledgeBase {
                   <a class="kb-file__download rounded-full bg-sky-500 px-4 py-2 font-semibold text-white transition hover:bg-sky-600" href="${downloadUrl}" download>Download</a>
                 </div>
               </header>
-              <pre class="kb-file__code overflow-x-auto rounded-2xl border border-slate-200 bg-slate-950 p-5 text-sm text-slate-100"><code class="language-${this.escapeHtml(extension || 'text')}">${escaped}</code></pre>
+              <pre class="kb-file__code overflow-x-auto rounded-2xl border border-slate-200 bg-slate-950 p-5 text-sm text-slate-100"><code class="hljs language-${this.escapeHtml(extension || 'text')}">${escaped}</code></pre>
             </div>
         `;
 

@@ -91,6 +91,10 @@ export class TemplateContextBuilder {
         .filter(Boolean)
     ];
 
+    if (this.options.server?.liveReload && !this.options.isStaticSite && process.env.NODE_ENV !== 'production') {
+      js.push('/__kb/live.js');
+    }
+
     const entries = (this.options.plugins || []).flatMap(plugin => {
       const entry = plugin.clientEntry;
       const container = entry && /^data-[a-z0-9-]+$/.test(entry.marker)

@@ -6,6 +6,8 @@ import { GitCommitInfo } from '../core/models';
  */
 export class GitService {
     private repoPath: string;
+    /** Commit information changes rarely; nine git processes per page are not affordable. */
+    private displayCache?: { value: GitCommitInfo | null; expires: number };
 
     constructor(repoPath: string = '.') {
         this.repoPath = repoPath;
@@ -168,10 +170,12 @@ export class GitService {
      * Get commit info formatted for display
      */
     getCommitInfoForDisplay(): GitCommitInfo | null {
-        if (!this.isGitRepository()) {
-            return null;
+        const now = Date.now();
+        if (this.displayCache && this.displayCache.expires > now) {
+            return this.displayCache.value;
         }
-
-        return this.getLatestCommit();
+        const value = this.isGitRepository() ? this.getLatestCommit() : null;
+        this.displayCache = { value, expires: now + 60000 };
+        return value;
     }
 }
