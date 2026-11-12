@@ -9,10 +9,12 @@ export class TemplateContextBuilder {
   build(content: RenderedContent): TemplateRenderContext {
     const baseUrl = this.normalizeBaseUrl(this.options.baseUrl);
     const navigation = this.mapNavigationItems(content.navigation || []);
+    // Ancestors are directories; only the crumb of the rendered document itself is a file.
+    const documentPath = content.metadata?.isDirectory ? undefined : content.metadata?.path;
     const breadcrumbs = (content.breadcrumbs || []).map(crumb => ({
       title: crumb.title,
       path: crumb.path,
-      href: this.composeHref(crumb.path, !(content.metadata?.isWorkManager && crumb.path === content.metadata.path))
+      href: this.composeHref(crumb.path, !(documentPath && crumb.path === documentPath))
     }));
 
     return {

@@ -65,52 +65,51 @@ export class StaticSiteBuilder {
     }
   }
 
+  /**
+   * Every directory gets exactly one index.html: the authored index (index.md or a
+   * raw index.html) when it exists, otherwise the generated listing. Any failure
+   * aborts the build so a partial site is never reported as a success.
+   */
   private async buildPages(outputDir: string, currentPath: string = ''): Promise<void> {
     const fileService = this.knowledgeBase.getFileService();
+    const items = await fileService.getDirectoryListing(currentPath);
+    let hasAuthoredIndex = false;
 
-    try {
-      const items = await fileService.getDirectoryListing(currentPath);
+    await fs.mkdir(path.join(outputDir, currentPath), { recursive: true });
 
-      for (const item of items) {
-        if (item.isDirectory) {
-          const dirOutputPath = path.join(outputDir, item.path);
-          await fs.mkdir(dirOutputPath, { recursive: true });
-
-          await this.buildPages(outputDir, item.path);
-
-          const indexPath = path.posix.join(item.path, 'index.md');
-          if (await fileService.exists(indexPath)) {
-            const content = await this.knowledgeBase.renderContent(item.path);
-            if (content) {
-              const htmlPath = path.join(outputDir, item.path, 'index.html');
-              await this.writeHtmlFile(htmlPath, content);
-            }
-          }
-        } else if (item.extension === '.md') {
-          const content = await this.knowledgeBase.renderContent(item.path);
-          if (content) {
-            const htmlPath = path.join(outputDir, item.path.replace(/\.md$/, '.html'));
-            await fs.mkdir(path.dirname(htmlPath), { recursive: true });
-            await this.writeHtmlFile(htmlPath, content);
-          }
-        } else {
-          const sourcePath = fileService.getAbsolutePath(item.path);
-          const targetPath = path.join(outputDir, item.path);
-          await fs.mkdir(path.dirname(targetPath), { recursive: true });
-          await fs.copyFile(sourcePath, targetPath);
-        }
+    for (const item of items) {
+      if (item.isDirectory) {
+        await this.buildPages(outputDir, item.path);
+        continue;
       }
 
-      if (currentPath === '') {
-        const content = await this.knowledgeBase.renderContent('');
-        if (content) {
-          const indexPath = path.join(outputDir, 'index.html');
-          await this.writeHtmlFile(indexPath, content);
-        }
+      const name = path.posix.basename(item.path.split('\\').join('/')).toLowerCase();
+      if (name === 'index.md' || name === 'index.html') {
+        hasAuthoredIndex = true;
       }
 
-    } catch (error) {
-      console.error(`Error building pages for ${currentPath}:`, error);
+      if (item.extension === '.md') {
+        const content = await this.knowledgeBase.renderContent(item.path);
+        if (!content) {
+          throw new Error(`Cannot render page: ${item.path}`);
+        }
+        const htmlPath = path.join(outputDir, item.path.replace(/\.md$/, '.html'));
+        await fs.mkdir(path.dirname(htmlPath), { recursive: true });
+        await this.writeHtmlFile(htmlPath, content);
+      } else {
+        const sourcePath = fileService.getAbsolutePath(item.path);
+        const targetPath = path.join(outputDir, item.path);
+        await fs.mkdir(path.dirname(targetPath), { recursive: true });
+        await fs.copyFile(sourcePath, targetPath);
+      }
+    }
+
+    if (!hasAuthoredIndex) {
+      const listing = await this.knowledgeBase.renderContent(currentPath);
+      if (!listing) {
+        throw new Error(`Cannot render directory listing: ${currentPath || '/'}`);
+      }
+      await this.writeHtmlFile(path.join(outputDir, currentPath, 'index.html'), listing);
     }
   }
 
