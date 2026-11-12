@@ -1,0 +1,2 @@
+import{c as e,i as t}from"./kb-controls-chunk.js";var n=e(),r=t();function i({html:e}){let t=(0,n.useRef)(null);return(0,n.useEffect)(()=>{t.current?.querySelectorAll(`pre code`).forEach(e=>window.hljs?.highlightElement?.(e))},[e]),(0,r.jsx)(`div`,{ref:t,className:`prose max-w-none`,dangerouslySetInnerHTML:{__html:e}})}export{i as t};
+//# sourceMappingURL=kb-MarkdownFragment-chunk.js.map

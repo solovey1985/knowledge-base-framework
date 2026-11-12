@@ -10,8 +10,9 @@ interface LightboxState {
 }
 
 export function initLightbox(): void {
-  const lightbox = document.querySelector<HTMLElement>('[data-kb-lightbox]');
-  if (!lightbox) return;
+  const host = document.querySelector<HTMLElement>('[data-kb-lightbox]');
+  if (!host) return;
+  const lightbox: HTMLElement = host;
 
   const imageEl = lightbox.querySelector<HTMLImageElement>('[data-kb-lightbox-image]');
   const captionEl = lightbox.querySelector<HTMLElement>('[data-kb-lightbox-caption]');

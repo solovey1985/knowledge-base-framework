@@ -53,6 +53,17 @@ function applyState(navRoot: HTMLElement, state: NavState): void {
 }
 
 function bindToggleHandlers(navRoot: HTMLElement, state: NavState): void {
+  navRoot.addEventListener('keydown', event => {
+    if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return;
+    const toggle = (event.target as HTMLElement).closest<HTMLButtonElement>('[data-kb-nav-toggle]');
+    const item = toggle?.closest<HTMLElement>('[data-kb-nav-item]');
+    if (!item?.dataset.path) return;
+    event.preventDefault();
+    const expanded = event.key === 'ArrowRight';
+    setExpanded(item, expanded);
+    state[item.dataset.path] = expanded;
+    saveState(state);
+  });
   navRoot.addEventListener('click', event => {
     const toggle = (event.target as HTMLElement).closest<HTMLButtonElement>('[data-kb-nav-toggle]');
     if (!toggle) return;
@@ -97,8 +108,8 @@ function bindBulkActions(navRoot: HTMLElement, state: NavState): void {
 }
 
 function setExpanded(item: HTMLElement, expanded: boolean): void {
-  const children = item.querySelector<HTMLElement>('[data-kb-nav-children]');
-  const toggle = item.querySelector<HTMLButtonElement>('[data-kb-nav-toggle]');
+  const children = item.querySelector<HTMLElement>(':scope > [data-kb-nav-children]');
+  const toggle = item.querySelector<HTMLButtonElement>(':scope > .kb-nav-row > [data-kb-nav-toggle]');
   item.classList.toggle('is-collapsed', !expanded);
   item.classList.toggle('is-expanded', expanded);
   if (children) {
@@ -140,14 +151,7 @@ function normalizePath(pathname: string, baseUrl: string): string {
 function expandParents(item: HTMLElement | null): void {
   let current: HTMLElement | null = item;
   while (current) {
-    current.classList.remove('is-collapsed');
-    current.classList.add('is-expanded');
-    const children = current.querySelector<HTMLElement>('[data-kb-nav-children]');
-    if (children) {
-      children.hidden = false;
-    }
-    const toggle = current.querySelector<HTMLButtonElement>('[data-kb-nav-toggle]');
-    toggle?.setAttribute('aria-expanded', 'true');
+    setExpanded(current, true);
     current = current.parentElement?.closest<HTMLElement>('[data-kb-nav-item]') || null;
   }
 }
@@ -159,6 +163,11 @@ function initDrawer(sidebar: HTMLElement): void {
   const body = document.body;
 
   const setOpen = (next: boolean) => {
+    const hidden = window.innerWidth <= 960 && !next;
+    sidebar.inert = hidden;
+    if (hidden) sidebar.setAttribute('aria-hidden', 'true');
+    else sidebar.removeAttribute('aria-hidden');
+    openers.forEach(trigger => trigger.setAttribute('aria-expanded', String(next)));
     sidebar.classList.toggle('is-visible', next);
     body?.classList.toggle('kb-drawer-open', next);
     if (overlay) {
@@ -177,10 +186,15 @@ function initDrawer(sidebar: HTMLElement): void {
   }));
 
   overlay?.addEventListener('click', () => setOpen(false));
-
-  window.addEventListener('resize', () => {
-    if (window.innerWidth > 960) {
+  sidebar.addEventListener('keydown', event => {
+    if (event.key === 'Escape') {
       setOpen(false);
+      (openers[0] as HTMLElement | undefined)?.focus();
     }
   });
+
+  window.addEventListener('resize', () => {
+    setOpen(window.innerWidth <= 960 && sidebar.classList.contains('is-visible'));
+  });
+  setOpen(false);
 }

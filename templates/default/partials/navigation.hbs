@@ -2,14 +2,14 @@
   <ul class="kb-nav-list space-y-1">
     {{#each items}}
       <li
-        class="kb-nav-item rounded-2xl px-2 py-1 {{#if isDirectory}}is-directory{{/if}} {{#if isActive}}is-active{{/if}}"
+        class="kb-nav-item rounded-2xl px-2 py-1 {{#if isDirectory}}is-directory is-collapsed{{/if}} {{#if isActive}}is-active{{/if}}"
         data-kb-nav-item
         data-path="{{path}}"
       >
         <div class="kb-nav-row flex items-center gap-2">
-          {{#if isDirectory}}
-            <button class="kb-nav-toggle inline-flex h-8 w-8 items-center justify-center rounded-xl border border-slate-200 bg-slate-50 text-slate-600 transition hover:bg-white" data-kb-nav-toggle aria-expanded="true">
-              <span class="kb-nav-toggle-icon">▾</span>
+          {{#if children.length}}
+            <button type="button" class="kb-button kb-button-secondary kb-icon-button kb-nav-toggle" data-kb-nav-toggle aria-expanded="false" aria-controls="{{childrenId}}" aria-label="Toggle {{title}}" title="Toggle {{title}}">
+              <span class="kb-icon icon-[lucide--chevron-down]" aria-hidden="true"></span>
             </button>
           {{else}}
             <span class="kb-nav-toggle-spacer inline-flex h-8 w-8"></span>
@@ -21,7 +21,7 @@
         </div>
 
         {{#if children.length}}
-          <div class="kb-nav-children ml-4 border-l border-slate-200 pl-3" data-kb-nav-children>
+          <div id="{{childrenId}}" class="kb-nav-children ml-4 border-l border-slate-200 pl-3" data-kb-nav-children hidden>
             {{> navigation items=children}}
           </div>
         {{/if}}

@@ -1,4 +1,4 @@
-let mermaidLoader: Promise<typeof import('mermaid/dist/mermaid.esm.mjs')> | null = null;
+let mermaidLoader: Promise<typeof import('https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.esm.min.mjs')> | null = null;
 
 function loadMermaid() {
   if (!mermaidLoader) {

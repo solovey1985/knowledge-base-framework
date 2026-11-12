@@ -12,7 +12,7 @@ interface SearchDocument {
 }
 
 interface SearchPayload {
-  index: lunr.Index.JsonSerialized;
+  index: Parameters<typeof lunr.Index.load>[0];
   documents: SearchDocument[];
 }
 
@@ -216,7 +216,7 @@ function createSearchModal(): SearchModal {
     <div class="kb-search-modal__dialog">
       <div class="kb-search-modal__bar">
         <input type="search" placeholder="Search documentation" aria-label="Search documentation" />
-        <button class="kb-search-modal__close" data-kb-close aria-label="Close search">✕</button>
+        <button class="kb-search-modal__close kb-button kb-button-secondary kb-icon-button" data-kb-close aria-label="Close search" title="Close search"><span class="icon-[lucide--x] size-4" aria-hidden="true"></span></button>
       </div>
       <div class="kb-search-modal__status" data-kb-search-status>Loading index…</div>
       <div class="kb-search-modal__results" data-kb-search-results></div>
@@ -298,7 +298,7 @@ function createSearchModal(): SearchModal {
       if (!status) return;
       status.classList.remove('is-hidden');
       if (retryable) {
-        status.innerHTML = `${escapeHtml(message)} <button class="kb-search-retry" style="margin-left:0.5rem;padding:0.2rem 0.6rem;border-radius:0.4rem;border:1px solid #ccc;background:#fff;cursor:pointer">Retry</button>`;
+        status.innerHTML = `${escapeHtml(message)} <button class="kb-search-retry kb-button kb-button-secondary">Retry</button>`;
         const retryBtn = status.querySelector('.kb-search-retry');
         retryBtn?.addEventListener('click', () => {
           window.dispatchEvent(new CustomEvent('kb-search-retry'));

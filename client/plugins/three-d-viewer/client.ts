@@ -38,36 +38,28 @@ function loadDependencies(): Promise<ThreeDeps> {
   return dependenciesLoader;
 }
 
-export function initThreeViewer(): void {
-  const hosts = Array.from(document.querySelectorAll<HTMLElement>('[data-kb-3d-viewer]'));
-  if (hosts.length === 0) {
-    return;
-  }
-
-  hosts.forEach(host => {
-    bootViewer(host).catch(error => {
-      setStatus(host, `Failed to load preview: ${String(error)}`);
-    });
-  });
+export interface ViewerControls {
+  reset(): void;
+  wireframe(enabled: boolean): void;
 }
 
-async function bootViewer(host: HTMLElement): Promise<void> {
-  const modelUrl = host.getAttribute('data-model-url') || '';
-  const modelFormat = (host.getAttribute('data-model-format') || '').toLowerCase();
-  const backgroundColor = host.getAttribute('data-background-color') || DEFAULT_BACKGROUND_COLOR;
-  const modelRotation = parseModelRotation(host.getAttribute('data-model-rotation'));
+/** React owns the controls. Three owns the canvas, observer and GPU resources. */
+export async function bootViewer(host: HTMLElement, source: HTMLElement, signal: AbortSignal): Promise<ViewerControls | undefined> {
+  const modelUrl = source.getAttribute('data-model-url') || '';
+  const modelFormat = (source.getAttribute('data-model-format') || '').toLowerCase();
+  const backgroundColor = source.getAttribute('data-background-color') || DEFAULT_BACKGROUND_COLOR;
+  const modelRotation = parseModelRotation(source.getAttribute('data-model-rotation'));
   if (!modelUrl || !modelFormat) {
-    setStatus(host, 'Model path is missing.');
-    return;
+    throw new Error('Model path is missing.');
   }
 
   if (modelFormat !== 'stl' && modelFormat !== 'obj') {
-    setStatus(host, `Preview for .${modelFormat} is not supported yet.`);
-    return;
+    throw new Error(`Unsupported model format: ${modelFormat}`);
   }
 
   const { THREE, OrbitControls, STLLoader, OBJLoader } = await loadDependencies();
 
+  if (signal.aborted) return;
   const scene = new THREE.Scene();
   scene.background = new THREE.Color(backgroundColor);
 
@@ -95,49 +87,77 @@ async function bootViewer(host: HTMLElement): Promise<void> {
   );
   scene.add(root);
 
-  if (modelFormat === 'stl') {
-    const loader = new STLLoader();
-    const geometry = await loader.loadAsync(modelUrl);
-    geometry.computeVertexNormals();
-    const material = new THREE.MeshStandardMaterial({ color: 0x93c5fd, metalness: 0.12, roughness: 0.7 });
-    const mesh = new THREE.Mesh(geometry, material);
-    root.add(mesh);
-  }
-
-  if (modelFormat === 'obj') {
-    const loader = new OBJLoader();
-    const object = await loader.loadAsync(modelUrl);
-    object.traverse(node => {
-      if ((node as { isMesh?: boolean }).isMesh) {
-        const mesh = node as { material: unknown };
-        if (!mesh.material) {
-          mesh.material = new THREE.MeshStandardMaterial({ color: 0xcbd5e1, metalness: 0.08, roughness: 0.75 });
-        }
+  let frame = 0;
+  let observer: ResizeObserver | undefined;
+  function dispose() {
+    cancelAnimationFrame(frame);
+    observer?.disconnect();
+    controls.dispose();
+    root.traverse(node => {
+      if (node instanceof THREE.Mesh) {
+        node.geometry.dispose();
+        const materials = Array.isArray(node.material) ? node.material : [node.material];
+        materials.forEach(material => material.dispose());
       }
     });
-    root.add(object);
+    root.clear();
+    renderer.dispose();
+    renderer.domElement.remove();
   }
+  signal.addEventListener('abort', dispose, { once: true });
+  try {
+    if (modelFormat === 'stl') {
+      const loader = new STLLoader();
+      const geometry = await loader.loadAsync(modelUrl);
+      geometry.computeVertexNormals();
+      const material = new THREE.MeshStandardMaterial({ color: 0x93c5fd, metalness: 0.12, roughness: 0.7 });
+      const mesh = new THREE.Mesh(geometry, material);
+      root.add(mesh);
+    }
 
-  const fit = fitModel(THREE, root, camera, controls);
-  attachControls(host, root, fit.reset);
-  clearStatus(host);
+    if (modelFormat === 'obj') {
+      const loader = new OBJLoader();
+      const object = await loader.loadAsync(modelUrl);
+      object.traverse(node => {
+        if ((node as { isMesh?: boolean }).isMesh) {
+          const mesh = node as import('three').Mesh;
+          if (!mesh.material) {
+            mesh.material = new THREE.MeshStandardMaterial({ color: 0xcbd5e1, metalness: 0.08, roughness: 0.75 });
+          }
+        }
+      });
+      root.add(object);
+    }
 
-  const resizeObserver = new ResizeObserver(() => {
-    const width = Math.max(host.clientWidth, 1);
-    const height = Math.max(host.clientHeight, 1);
-    camera.aspect = width / height;
-    camera.updateProjectionMatrix();
-    renderer.setSize(width, height);
-  });
-  resizeObserver.observe(host);
+    if (signal.aborted) {
+      dispose();
+      return;
+    }
+    const fit = fitModel(THREE, root, camera, controls);
 
-  const animate = () => {
-    controls.update();
-    renderer.render(scene, camera);
-    requestAnimationFrame(animate);
-  };
 
-  animate();
+    observer = new ResizeObserver(() => {
+      const width = Math.max(host.clientWidth, 1);
+      const height = Math.max(host.clientHeight, 1);
+      camera.aspect = width / height;
+      camera.updateProjectionMatrix();
+      renderer.setSize(width, height);
+    });
+    observer.observe(host);
+
+    const animate = () => {
+      controls.update();
+      renderer.render(scene, camera);
+      frame = requestAnimationFrame(animate);
+    };
+
+    animate();
+    return { reset: fit.reset, wireframe: enabled => setWireframe(root, enabled) };
+  } catch (error) {
+    dispose();
+    signal.removeEventListener('abort', dispose);
+    throw error;
+  }
 }
 
 function fitModel(
@@ -191,30 +211,6 @@ function adaptGrid(
   grid.parent?.remove(grid);
 }
 
-function attachControls(
-  host: HTMLElement,
-  root: InstanceType<ThreeModule['Group']>,
-  resetView: () => void
-): void {
-  const resetBtn = host.querySelector<HTMLButtonElement>('[data-kb-3d-reset]');
-  const wireframeBtn = host.querySelector<HTMLButtonElement>('[data-kb-3d-wireframe]');
-
-  resetBtn?.addEventListener('click', () => {
-    resetView();
-  });
-
-  if (!wireframeBtn) {
-    return;
-  }
-
-  let wireframeEnabled = false;
-  wireframeBtn.addEventListener('click', () => {
-    wireframeEnabled = !wireframeEnabled;
-    setWireframe(root, wireframeEnabled);
-    wireframeBtn.textContent = wireframeEnabled ? 'Solid' : 'Wireframe';
-  });
-}
-
 function setWireframe(root: InstanceType<ThreeModule['Group']>, enabled: boolean): void {
   root.traverse(node => {
     const mesh = node as {
@@ -263,14 +259,3 @@ function parseModelRotation(value: string | null): ModelRotation {
   };
 }
 
-function setStatus(host: HTMLElement, message: string): void {
-  const status = host.querySelector<HTMLElement>('[data-kb-3d-status]');
-  if (!status) return;
-  status.textContent = message;
-}
-
-function clearStatus(host: HTMLElement): void {
-  const status = host.querySelector<HTMLElement>('[data-kb-3d-status]');
-  if (!status) return;
-  status.remove();
-}

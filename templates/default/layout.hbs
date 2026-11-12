@@ -5,19 +5,6 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{{page.title}} • {{site.title}}</title>
   <meta name="description" content="{{page.description}}">
-  <script>
-    window.tailwind = window.tailwind || {};
-    window.tailwind.config = {
-      theme: {
-        extend: {
-          fontFamily: {
-            sans: ['Inter', 'ui-sans-serif', 'system-ui']
-          }
-        }
-      }
-    };
-  </script>
-  <script src="https://cdn.tailwindcss.com"></script>
   {{#each assets.css}}
     <link rel="stylesheet" href="{{this}}">
   {{/each}}
@@ -51,40 +38,40 @@
     </main>
   {{else}}
     <div class="kb-overlay fixed inset-0 z-30 hidden bg-slate-950/20 backdrop-blur-sm lg:hidden" data-kb-overlay></div>
-    <button class="kb-mobile-toggle fixed left-4 top-4 z-40 inline-flex h-12 w-12 items-center justify-center rounded-2xl border border-slate-200 bg-white text-slate-700 shadow-lg shadow-slate-200/50 lg:hidden" data-kb-open-drawer aria-label="Open navigation">
-      <span></span>
+    <button class="kb-button kb-button-secondary kb-icon-button kb-mobile-toggle fixed left-4 top-4 z-40 inline-flex h-12 w-12 items-center justify-center rounded-2xl border border-slate-200 bg-white text-slate-700 shadow-lg shadow-slate-200/50 lg:hidden" data-kb-open-drawer aria-label="Open navigation" title="Open navigation" aria-expanded="false">
+      <span class="icon-[lucide--menu] size-5" aria-hidden="true"></span>
     </button>
 
     <div class="kb-lightbox fixed inset-0 z-50 hidden items-center justify-center bg-slate-950/60 p-4" data-kb-lightbox>
       <div class="kb-lightbox__inner relative flex max-h-[90vh] w-full max-w-6xl flex-col overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-2xl shadow-slate-300/50">
-        <button class="kb-lightbox__close absolute right-4 top-4 rounded-full bg-slate-100 px-3 py-2 text-slate-700" data-kb-lightbox-close aria-label="Close">×</button>
-        <button class="kb-lightbox__nav kb-lightbox__nav--prev absolute left-4 top-1/2 -translate-y-1/2 rounded-full bg-slate-100 px-3 py-2 text-slate-700" data-kb-lightbox-prev aria-label="Previous">‹</button>
-        <button class="kb-lightbox__nav kb-lightbox__nav--next absolute right-4 top-1/2 -translate-y-1/2 rounded-full bg-slate-100 px-3 py-2 text-slate-700" data-kb-lightbox-next aria-label="Next">›</button>
-        <button class="kb-lightbox__zoom absolute bottom-4 right-4 rounded-full bg-slate-100 px-3 py-2 text-slate-700" data-kb-lightbox-zoom aria-label="Toggle zoom">⤢</button>
+        <button class="kb-button kb-button-secondary kb-icon-button kb-lightbox__close absolute right-4 top-4 rounded-full bg-slate-100 px-3 py-2 text-slate-700" data-kb-lightbox-close aria-label="Close"><span class="icon-[lucide--x] size-4" aria-hidden="true"></span></button>
+        <button class="kb-button kb-button-secondary kb-icon-button kb-lightbox__nav kb-lightbox__nav--prev absolute left-4 top-1/2 -translate-y-1/2 rounded-full bg-slate-100 px-3 py-2 text-slate-700" data-kb-lightbox-prev aria-label="Previous"><span class="icon-[lucide--chevron-left] size-4" aria-hidden="true"></span></button>
+        <button class="kb-button kb-button-secondary kb-icon-button kb-lightbox__nav kb-lightbox__nav--next absolute right-4 top-1/2 -translate-y-1/2 rounded-full bg-slate-100 px-3 py-2 text-slate-700" data-kb-lightbox-next aria-label="Next"><span class="icon-[lucide--chevron-right] size-4" aria-hidden="true"></span></button>
+        <button class="kb-button kb-button-secondary kb-icon-button kb-lightbox__zoom absolute bottom-4 right-4 rounded-full bg-slate-100 px-3 py-2 text-slate-700" data-kb-lightbox-zoom aria-label="Toggle zoom"><span class="icon-[lucide--maximize] size-4" aria-hidden="true"></span></button>
         <img class="max-h-[80vh] w-full object-contain" data-kb-lightbox-image alt="Preview" />
         <div class="kb-lightbox__caption border-t border-slate-200 bg-white px-4 py-3 text-sm text-slate-600" data-kb-lightbox-caption></div>
       </div>
     </div>
 
     <div class="kb-shell lg:grid lg:grid-cols-[20rem_minmax(0,1fr)] min-h-screen">
-      <aside class="kb-sidebar fixed inset-y-0 left-0 z-40 w-[20rem] -translate-x-full border-r border-slate-200 bg-white/95 backdrop-blur transition-transform lg:sticky lg:translate-x-0" data-kb-sidebar>
+      <aside class="kb-sidebar fixed inset-y-0 left-0 z-40 w-[20rem] border-r border-slate-200 bg-white/95 backdrop-blur transition-transform lg:sticky" data-kb-sidebar>
         <div class="kb-sidebar__header border-b border-slate-200 px-6 py-6">
-          <button class="kb-mobile-close mb-4 inline-flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200 bg-slate-50 text-slate-700 lg:hidden" data-kb-close-drawer aria-label="Close navigation">✕</button>
+          <button class="kb-button kb-button-secondary kb-icon-button kb-mobile-close mb-4 inline-flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200 bg-slate-50 text-slate-700 lg:hidden" data-kb-close-drawer aria-label="Close navigation"><span class="icon-[lucide--x] size-4" aria-hidden="true"></span></button>
           <h2 class="kb-sidebar__title text-2xl font-semibold tracking-tight text-slate-900">
             <a href="{{#if site.baseUrl}}{{site.baseUrl}}{{else}}/{{/if}}" class="hover:text-sky-600">{{site.title}}</a>
           </h2>
           <p class="kb-sidebar__subtitle mt-2 text-sm leading-6 text-slate-500">{{site.description}}</p>
           {{#if search.enabled}}
-            <button class="kb-search-trigger mt-5 inline-flex w-full items-center justify-between rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700 transition hover:border-sky-400/50 hover:bg-white" data-kb-search-trigger>
-              <span>Search docs</span>
+            <button class="kb-button kb-button-secondary kb-search-trigger mt-5 w-full" data-kb-search-trigger>
+              <span class="icon-[lucide--search] size-4" aria-hidden="true"></span><span>Search docs</span>
               <kbd class="rounded-lg border border-slate-200 bg-white px-2 py-1 text-[11px] text-slate-500">/</kbd>
             </button>
           {{/if}}
         </div>
 
         <div class="kb-sidebar__actions flex gap-2 px-6 py-4">
-          <button class="flex-1 rounded-full border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700 transition hover:bg-white" data-kb-expand-nav>Expand all</button>
-          <button class="flex-1 rounded-full border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700 transition hover:bg-white" data-kb-collapse-nav>Collapse all</button>
+          <button class="kb-button kb-button-secondary flex-1" data-kb-expand-nav><span class="icon-[lucide--list-plus] size-4" aria-hidden="true"></span>Expand all</button>
+          <button class="kb-button kb-button-secondary flex-1" data-kb-collapse-nav><span class="icon-[lucide--list-minus] size-4" aria-hidden="true"></span>Collapse all</button>
         </div>
 
         <nav class="kb-nav max-h-[calc(100vh-13rem)] overflow-y-auto px-4 pb-8" data-kb-nav>
@@ -112,8 +99,8 @@
     </div>
   {{/if}}
 
-  {{#each assets.js}}
-    <script src="{{this}}" defer></script>
+  {{#each assets.scripts}}
+    <script src="{{src}}" {{#if module}}type="module"{{else}}defer{{/if}}></script>
   {{/each}}
 </body>
 </html>
