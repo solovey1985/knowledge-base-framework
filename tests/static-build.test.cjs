@@ -59,3 +59,28 @@ test('a page that cannot be rendered fails the build', async t => {
   t.after(() => { console.error = original; });
   await assert.rejects(new StaticSiteBuilder({ ...options, plugins: [failing] }).build(), /Cannot render page: .*deep\.md/);
 });
+
+test('breadcrumbs start at the authored home, or the root listing when there is none', async t => {
+  const { contentRootPath, options, read } = await fixture(t);
+  const crumbs = html => [...html.match(/<div class="kb-breadcrumb[\s\S]*?<\/div>/)[0].matchAll(/<a href="([^"]*)"( aria-current="page")?[^>]*>([^<]*)<\/a>/g)]
+    .map(match => ({ href: match[1], current: Boolean(match[2]), title: match[3] }));
+  const withHome = { ...options, navigation: { homeTitle: 'Головна' } };
+
+  await new StaticSiteBuilder(withHome).build();
+  assert.deepEqual(crumbs(await read('index.html')), [{ href: '/kb/', current: true, title: 'Головна' }]);
+  assert.deepEqual(crumbs(await read('папка', 'nested', 'deep.html')).map(crumb => [crumb.href, crumb.current]), [
+    ['/kb/', false], ['/kb/папка/', false], ['/kb/папка/nested/', false], ['/kb/папка/nested/deep.html', true]]);
+
+  await fs.writeFile(path.join(contentRootPath, 'index.md'), '# Home marker');
+  await new StaticSiteBuilder(withHome).build();
+  assert.deepEqual(crumbs(await read('index.html')), [{ href: '/kb/index.html', current: true, title: 'Головна' }]);
+  assert.equal(crumbs(await read('папка', 'index.html'))[0].href, '/kb/index.html');
+
+  // Server mode links to the document itself, not to the "/" listing.
+  const { KnowledgeBase } = require('../lib');
+  const { TemplateContextBuilder } = require('../lib/services/TemplateContextBuilder');
+  const server = { contentRootPath, baseUrl: '' };
+  const page = await new KnowledgeBase(server).renderContent('папка/нотатка.md');
+  const context = new TemplateContextBuilder(server).build(page);
+  assert.deepEqual(context.breadcrumbs.map(crumb => crumb.href), ['/index.md', '/папка/', '/папка/нотатка.md']);
+});

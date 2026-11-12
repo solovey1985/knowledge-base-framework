@@ -48,6 +48,12 @@ export interface NavigationItem {
   
   /** Whether this item is hidden from navigation */
   hidden?: boolean;
+
+  /** Breadcrumb only: the link to the home page. */
+  isHome?: boolean;
+
+  /** Breadcrumb only: the page being rendered. */
+  isCurrent?: boolean;
 }
 
 export interface RenderedContent {

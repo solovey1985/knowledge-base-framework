@@ -9,13 +9,17 @@ export class TemplateContextBuilder {
   build(content: RenderedContent): TemplateRenderContext {
     const baseUrl = this.normalizeBaseUrl(this.options.baseUrl);
     const navigation = this.mapNavigationItems(content.navigation || []);
-    // Ancestors are directories; only the crumb of the rendered document itself is a file.
+    // Ancestors are directories; the crumb of the rendered document and an authored home are files.
     const documentPath = content.metadata?.isDirectory ? undefined : content.metadata?.path;
-    const breadcrumbs = (content.breadcrumbs || []).map(crumb => ({
-      title: crumb.title,
-      path: crumb.path,
-      href: this.composeHref(crumb.path, !(documentPath && crumb.path === documentPath))
-    }));
+    const breadcrumbs = (content.breadcrumbs || []).map(crumb => {
+      const isFile = crumb.isHome ? crumb.path !== '' : Boolean(documentPath && crumb.path === documentPath);
+      return {
+        title: crumb.title,
+        path: crumb.path,
+        href: this.composeHref(crumb.path, !isFile),
+        current: Boolean(crumb.isCurrent)
+      };
+    });
 
     return {
       site: {

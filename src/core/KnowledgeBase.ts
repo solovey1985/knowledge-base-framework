@@ -464,7 +464,7 @@ export class KnowledgeBase {
         const markdownContent = await this.fileService.readFile(targetPath);
         const rendered = await this.markdownRenderer.render(markdownContent, targetPath);
         const navigation = await this.navigationService.generateNavigation(this.options.navigation!, targetPath);
-        const breadcrumbs = this.navigationService.generateBreadcrumb(targetPath);
+        const breadcrumbs = await this.buildBreadcrumbs(targetPath);
         const gitInfo = this.gitService.getCommitInfoForDisplay();
 
         return {
@@ -538,7 +538,7 @@ export class KnowledgeBase {
 
     private async composeContentResponse(targetPath: string, title: string, html: string, description?: string, metadata: Record<string, unknown> = {}): Promise<RenderedContent> {
         const navigation = await this.navigationService.generateNavigation(this.options.navigation!, targetPath);
-        const breadcrumbs = this.navigationService.generateBreadcrumb(targetPath);
+        const breadcrumbs = await this.buildBreadcrumbs(targetPath);
         const stats = await this.fileService.getStats(targetPath);
 
         return {
@@ -553,6 +553,31 @@ export class KnowledgeBase {
                 ...metadata
             }
         };
+    }
+
+    /**
+     * Home first, then the path. Home is the authored root index.md when it exists,
+     * otherwise the root listing; on the home page itself it is the only, current, item.
+     */
+    private async buildBreadcrumbs(targetPath: string): Promise<RenderedContent['breadcrumbs']> {
+        const normalized = (targetPath || '').split('\\').join('/').replace(/^\/+|\/+$/g, '');
+        const homePath = await this.fileService.exists('index.md') ? 'index.md' : '';
+        const home = {
+            title: this.options.navigation?.homeTitle || 'Home',
+            path: homePath,
+            children: [],
+            order: 0,
+            isActive: false,
+            isHome: true
+        };
+        if (!normalized || normalized === homePath) {
+            return [{ ...home, isCurrent: true }];
+        }
+        const trail = this.navigationService.generateBreadcrumb(normalized);
+        if (trail.length) {
+            trail[trail.length - 1].isCurrent = true;
+        }
+        return [home, ...trail];
     }
 
     private extractTitle(markdown: string): string | null {
@@ -809,7 +834,9 @@ export class KnowledgeBase {
                     return;
                 }
                 res.setHeader('Content-Type', 'application/json');
-                res.setHeader('Cache-Control', 'public, max-age=60');
+                // A private site's index must never be stored by shared caches.
+                const isPrivate = (this.options.plugins || []).some(plugin => plugin.authentication);
+                res.setHeader('Cache-Control', isPrivate ? 'private, no-store' : 'public, max-age=60');
                 res.json(payload);
             } catch (error) {
                 console.error('Error serving search index:', error);

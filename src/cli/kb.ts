@@ -3,9 +3,8 @@ import * as path from 'path';
 import * as fs from 'fs/promises';
 import { existsSync } from 'fs';
 import { spawnSync } from 'child_process';
-import express from 'express';
 import frameworkPackage from '../../package.json';
-import { KnowledgeBase, StaticSiteBuilder, loadPluginsFromFile } from '../index';
+import { buildSite, startServer } from '../index';
 import { ConfigError, loadConfigFile } from './configLoader';
 
 const templatesDir = path.join(__dirname, '..', 'service-templates');
@@ -189,7 +188,9 @@ async function updateProject(): Promise<void> {
 
 async function serveProject(args: string[]): Promise<void> {
     try {
-        const { config, path: configPath } = await loadConfigFile();
+        const flags = parseFlags(args, ['config', 'port', 'host', 'plugins']);
+        if (flags.port && !/^\d{1,5}$/.test(flags.port)) throw new ConfigError('Option --port needs a number.');
+        const { config, path: configPath } = await loadConfigFile(flags.config);
         // An explicit project entrypoint can prepare local credentials and plugins
         // before the standard plugin loader runs. Never auto-discover executable files.
         if (config.server?.entrypoint) {
@@ -201,32 +202,11 @@ async function serveProject(args: string[]): Promise<void> {
             await application.startServer();
             return;
         }
-        const plugins = resolvePluginsForConfig(config, path.dirname(configPath));
-
-        const app = express();
-        const projectAssetsDir = path.resolve('assets');
-        const frameworkRoot = path.resolve(__dirname, '..', '..');
-        const frameworkAssetsDir = resolveFrameworkAssetsDir(frameworkRoot, projectAssetsDir);
-
-        const kb = new KnowledgeBase({
-            ...config,
-            plugins,
-            contentRootPath: path.resolve(config.contentRootPath),
-            templates: {
-                ...config.templates,
-                assetsBasePath: config.templates?.assetsBasePath || '/framework-assets'
-            }
-        });
-
-        kb.setupSecurity(app);
-        app.use('/assets', express.static(projectAssetsDir, { fallthrough: false }));
-        app.use('/framework-assets', express.static(frameworkAssetsDir, { fallthrough: false }));
-
-        kb.setupMiddleware(app);
-
-        const port = config.server?.port || 3000;
-        app.listen(port, () => {
-            console.log(`📚 Knowledge Base running at http://localhost:${port}`);
+        startServer({
+            configPath,
+            pluginsConfigPath: flags.plugins,
+            port: flags.port ? Number(flags.port) : undefined,
+            host: flags.host
         });
     } catch (error) {
         handleConfigError(error);
@@ -235,9 +215,8 @@ async function serveProject(args: string[]): Promise<void> {
 
 async function buildProject(args: string[]): Promise<void> {
     try {
-        const { config, path: configPath } = await loadConfigFile();
-        const plugins = resolvePluginsForConfig(config, path.dirname(configPath));
-
+        const flags = parseFlags(args, ['config', 'plugins']);
+        const { config, path: configPath } = await loadConfigFile(flags.config);
         const isGitHubBuild = config.build?.target === 'github';
         const resolvedContentRoot = path.resolve(config.contentRootPath);
         const effectiveBaseUrl = config.baseUrl || '';
@@ -251,33 +230,27 @@ async function buildProject(args: string[]): Promise<void> {
         console.log(`  Search enabled:  ${config.search?.enabled ?? '(default)'}`);
         console.log('===========================');
 
-        const builder = new StaticSiteBuilder({ ...config, plugins, contentRootPath: resolvedContentRoot, isStaticSite: true });
-        await builder.build();
+        await buildSite({ configPath, pluginsConfigPath: flags.plugins });
     } catch (error) {
         handleConfigError(error);
     }
 }
 
-function resolvePluginsForConfig(config: { pluginsConfigPath?: string }, baseDir: string): ReturnType<typeof loadPluginsFromFile> {
-    const configuredPath = process.env.KB_PLUGINS_CONFIG || config.pluginsConfigPath || './kb.plugins.json';
-    const absolutePath = path.resolve(baseDir, configuredPath);
-    return loadPluginsFromFile(absolutePath);
-}
-
-function resolveFrameworkAssetsDir(frameworkRoot: string, fallbackDir: string): string {
-    const candidates = [
-        path.join(frameworkRoot, 'templates', 'default', 'assets'),
-        path.join(frameworkRoot, 'assets'),
-        path.join(frameworkRoot, 'lib', 'templates', 'default', 'assets')
-    ];
-
-    for (const candidate of candidates) {
-        if (existsSync(path.join(candidate, 'kb-app.js'))) {
-            return candidate;
+/** --name value and --name=value; unknown flags are rejected so typos are not ignored. */
+function parseFlags(args: string[], allowed: string[]): Record<string, string | undefined> {
+    const flags: Record<string, string | undefined> = {};
+    for (let i = 1; i < args.length; i++) {
+        const match = /^--([a-z-]+)(?:=(.*))?$/.exec(args[i]);
+        if (!match || !allowed.includes(match[1])) {
+            throw new ConfigError(`Unknown option: ${args[i]}. Supported: ${allowed.map(name => `--${name}`).join(', ')}`);
         }
+        const value = match[2] ?? args[++i];
+        if (value === undefined || value.startsWith('--')) {
+            throw new ConfigError(`Option --${match[1]} needs a value.`);
+        }
+        flags[match[1]] = value;
     }
-
-    return fallbackDir;
+    return flags;
 }
 
 function handleConfigError(error: unknown): void {
@@ -301,9 +274,15 @@ Usage:
 Commands:
     init [name]     Create a new knowledge base project
     update          Refresh scaffolded files (server/build)
-    serve           Start development server  
+    serve           Start the server
     build           Build static site
     help            Show this help message
+
+Options:
+    --config <file>     Configuration file (serve, build). Default: ./kb.config.json
+    --plugins <file>    Plugin settings file (serve, build). Overrides KB_PLUGINS_CONFIG
+    --port <number>     Port (serve). Overrides PORT and server.port
+    --host <address>    Bind address (serve). Overrides HOST and server.host
 
 Examples:
     kb init my-docs
@@ -313,7 +292,10 @@ Examples:
 }
 
 if (require.main === module) {
-    main().catch(console.error);
+    main().catch(error => {
+        console.error(error);
+        process.exitCode = 1;
+    });
 }
 
 async function copyFrameworkAssets(projectDir: string, destination: string): Promise<void> {

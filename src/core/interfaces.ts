@@ -70,6 +70,9 @@ export interface NavigationOptions {
   /** Files to exclude from navigation */
   excludePatterns?: string[];
   
+  /** Title of the first breadcrumb, which leads to the home page (default: Home) */
+  homeTitle?: string;
+
   /** Custom navigation file name */
   navigationFileName?: string;
   
@@ -80,6 +83,8 @@ export interface NavigationOptions {
 export interface ServerOptions {
   /** Optional CommonJS module exporting startServer(), relative to the config file. */
   entrypoint?: string;
+  /** Public liveness route answering an empty 204. Default: /healthz; false disables it. */
+  healthPath?: string | false;
   /** Port to run the development server on */
   port?: number;
   

@@ -4,9 +4,7 @@
   "description": "{{PROJECT_NAME}} knowledge base",
   "baseUrl": "",
   "server": {
-    "port": 3000,
-    "host": "localhost",
-    "watch": true
+    "port": 3000
   },
   "build": {
     "outputDir": "./docs",
@@ -24,15 +22,6 @@
     "indexFilePath": ".kb-search-index.json",
     "titleBoost": 10,
     "bodyBoost": 1
-  },
-  "auth": {
-    "enabled": false,
-    "username": "",
-    "password": "",
-    "cookieName": "kb_auth",
-    "cookieSecret": "",
-    "loginPath": "/login",
-    "logoutPath": "/logout"
   },
   "templates": {
     "assetsBasePath": "/framework-assets"

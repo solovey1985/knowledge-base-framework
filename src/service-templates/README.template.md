@@ -26,13 +26,9 @@ Edit `kb.plugins.json` to enable/disable framework plugins (for example the buil
 
 Interview practice pages can be created as `*.interview.md` files when the `interviewPrep` plugin is enabled in `kb.plugins.json`.
 
-To enable private access, set `auth.enabled` to `true` and provide:
+`server.js` and `build.js` are thin entry points: the framework resolves `kb.config.json`, loads the plugins and owns the middleware order. Environment: `PORT`, `HOST`, and `KB_PLUGINS_CONFIG` (an alternative plugin settings file).
 
-- `auth.username`
-- `auth.password`
-- `auth.cookieSecret`
-
-On Render, these values can also come from `KB_AUTH_*` environment variables.
+Private access uses the `passwordAuth` plugin and server-side `AUTH_*` environment variables; see `PASSWORD_AUTH.md` in the framework package. A site with authentication cannot be exported as a static site.
 
 ## Content Structure
 
@@ -50,4 +46,5 @@ This project can run as a server on Render with:
 
 1. Build command: `npm install`
 2. Start command: `npm start`
-3. Optional private access env vars: `KB_AUTH_ENABLED`, `KB_AUTH_USERNAME`, `KB_AUTH_PASSWORD`, `KB_AUTH_COOKIE_SECRET`
+3. Health check path: `/healthz` (empty 204, always public)
+4. Private access: enable `passwordAuth` in `kb.plugins.json` and set the `AUTH_*` variables

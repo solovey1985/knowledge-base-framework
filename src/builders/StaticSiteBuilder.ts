@@ -205,6 +205,7 @@ export class StaticSiteBuilder {
       index: payload.index,
       documents: payload.documents
     };
+    // payload.documents carries no body: the text lives only inside the Lunr index.
     await fs.mkdir(path.dirname(outputIndexPath), { recursive: true });
     await fs.writeFile(outputIndexPath, JSON.stringify(outputPayload, null, 2), 'utf-8');
 

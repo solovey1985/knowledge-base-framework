@@ -85,7 +85,7 @@
             {{#if breadcrumbs.length}}
               <div class="kb-breadcrumb mb-6 flex flex-wrap gap-2 text-sm text-slate-500">
                 {{#each breadcrumbs}}
-                  <a href="{{href}}" class="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-sky-700 transition hover:bg-slate-100">{{title}}</a>
+                  <a href="{{href}}"{{#if current}} aria-current="page"{{/if}} class="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-sky-700 transition hover:bg-slate-100">{{title}}</a>
                 {{/each}}
               </div>
             {{/if}}
