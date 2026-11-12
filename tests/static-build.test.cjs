@@ -57,7 +57,7 @@ test('a page that cannot be rendered fails the build', async t => {
   const original = console.error;
   console.error = () => {};
   t.after(() => { console.error = original; });
-  await assert.rejects(new StaticSiteBuilder({ ...options, plugins: [failing] }).build(), /Cannot render page: .*deep\.md/);
+  await assert.rejects(new StaticSiteBuilder({ ...options, plugins: [failing] }).build(), /injected/);
 });
 
 test('breadcrumbs start at the authored home, or the root listing when there is none', async t => {

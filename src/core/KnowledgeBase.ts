@@ -220,6 +220,16 @@ export class KnowledgeBase {
                 next(error);
             }
         });
+
+        // Last: a rendering failure is a server error without internal details.
+        app.use((error: unknown, _req: Request, res: Response, next: NextFunction) => {
+            if (res.headersSent) {
+                next(error);
+                return;
+            }
+            console.error('Error handling request:', error);
+            res.status(500).send('Internal server error');
+        });
     }
 
     /**
@@ -261,58 +271,53 @@ export class KnowledgeBase {
     }
 
     /**
-     * Render content for a given path
+     * Render content for a given path. Null means the path does not exist; a failure
+     * to render an existing document is thrown so callers answer 500, not 404.
      */
     async renderContent(requestPath: string): Promise<RenderedContent | null> {
-        try {
-            const targetPath = requestPath;
+        const targetPath = requestPath;
 
-            // Directory routes always show listings. Index markdown remains available
-            // through its own document path, e.g. /folder/index.html.
-            if (!targetPath || await this.fileService.isDirectory(targetPath)) {
-                return await this.renderDirectoryListing(targetPath);
-            }
+        // Directory routes always show listings. Index markdown remains available
+        // through its own document path, e.g. /folder/index.html.
+        if (!targetPath || await this.fileService.isDirectory(targetPath)) {
+            return await this.renderDirectoryListing(targetPath);
+        }
 
-            if (!await this.fileService.exists(targetPath)) {
-                return null;
-            }
-
-            const extension = path.extname(targetPath).toLowerCase();
-
-            const pluginContent = await this.pluginManager.renderByFileType(targetPath, () => ({
-                requestPath: targetPath,
-                extension,
-                fileService: this.fileService,
-                readFile: (relativePath: string) => this.fileService.readFile(relativePath),
-                renderMarkdown: (markdown: string, currentPath: string = targetPath) => this.markdownRenderer.render(markdown, currentPath),
-                getStats: (relativePath: string) => this.fileService.getStats(relativePath),
-                buildRawContentUrl: (relativePath: string) => this.buildRawContentUrl(relativePath),
-                buildFriendlyUrl: (relativePath: string, type: 'directory' | 'markdown' | 'text' | 'app') => this.buildFriendlyUrl(relativePath, type),
-                composeContentResponse: (contentPath: string, title: string, html: string, description?: string, metadata: Record<string, unknown> = {}) =>
-                    this.composeContentResponse(contentPath, title, html, description, metadata)
-            }));
-            if (pluginContent) {
-                return pluginContent;
-            }
-
-            if (extension === '.md') {
-                return await this.renderMarkdownFile(targetPath, false);
-            }
-
-            if (this.isTextPreviewExtension(extension)) {
-                return await this.renderTextFile(targetPath);
-            }
-
-            if (this.isImageExtension(extension)) {
-                return await this.renderImageFile(targetPath);
-            }
-
-            return null;
-
-        } catch (error) {
-            console.error('Error rendering content:', error);
+        if (!await this.fileService.exists(targetPath)) {
             return null;
         }
+
+        const extension = path.extname(targetPath).toLowerCase();
+
+        const pluginContent = await this.pluginManager.renderByFileType(targetPath, () => ({
+            requestPath: targetPath,
+            extension,
+            fileService: this.fileService,
+            readFile: (relativePath: string) => this.fileService.readFile(relativePath),
+            renderMarkdown: (markdown: string, currentPath: string = targetPath) => this.markdownRenderer.render(markdown, currentPath),
+            getStats: (relativePath: string) => this.fileService.getStats(relativePath),
+            buildRawContentUrl: (relativePath: string) => this.buildRawContentUrl(relativePath),
+            buildFriendlyUrl: (relativePath: string, type: 'directory' | 'markdown' | 'text' | 'app') => this.buildFriendlyUrl(relativePath, type),
+            composeContentResponse: (contentPath: string, title: string, html: string, description?: string, metadata: Record<string, unknown> = {}) =>
+                this.composeContentResponse(contentPath, title, html, description, metadata)
+        }));
+        if (pluginContent) {
+            return pluginContent;
+        }
+
+        if (extension === '.md') {
+            return await this.renderMarkdownFile(targetPath, false);
+        }
+
+        if (this.isTextPreviewExtension(extension)) {
+            return await this.renderTextFile(targetPath);
+        }
+
+        if (this.isImageExtension(extension)) {
+            return await this.renderImageFile(targetPath);
+        }
+
+        return null;
     }
 
     /**

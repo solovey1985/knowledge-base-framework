@@ -32,3 +32,38 @@ test('update preserves custom application files and serve invokes its explicit e
   assert.equal(serve.status, 0, serve.stderr);
   assert.match(serve.stdout, /CUSTOM_BOOTSTRAP_OK/);
 });
+
+test('update replaces only marked files, never the README, and --dry-run writes nothing', async t => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'kb-cli-update-'));
+  t.after(() => fs.rm(root, { recursive: true, force: true }));
+  await fs.mkdir(path.join(root, 'content'));
+  const installed = path.join(root, 'node_modules', framework.name);
+  await fs.mkdir(installed, { recursive: true });
+  await fs.writeFile(path.join(installed, 'package.json'), JSON.stringify({ version: framework.version }));
+  await fs.writeFile(path.join(root, 'package.json'), JSON.stringify({ name: 'fixture', dependencies: { [framework.name]: framework.version } }));
+  await fs.writeFile(path.join(root, 'kb.config.json'), JSON.stringify({ contentRootPath: './content' }));
+  await fs.writeFile(path.join(root, 'kb.plugins.json'), '{"plugins":[]}');
+  await fs.writeFile(path.join(root, 'server.js'), '// kb:managed - old generated version\nold();');
+  await fs.writeFile(path.join(root, 'build.js'), 'my own build');
+  await fs.writeFile(path.join(root, 'README.md'), 'my readme');
+  const cli = path.resolve(__dirname, '../lib/cli/kb.js');
+  const read = file => fs.readFile(path.join(root, file), 'utf8');
+
+  const preview = spawnSync(process.execPath, [cli, 'update', '--dry-run'], { cwd: root, encoding: 'utf8' });
+  assert.equal(preview.status, 0, preview.stderr);
+  assert.match(preview.stdout, /would replace server\.js/);
+  assert.match(await read('server.js'), /old\(\)/);
+  await assert.rejects(fs.access(path.join(root, 'assets')));
+
+  const update = spawnSync(process.execPath, [cli, 'update'], { cwd: root, encoding: 'utf8' });
+  assert.equal(update.status, 0, update.stderr);
+  assert.match(await read('server.js'), /^\/\/ kb:managed[^\n]*\n[\s\S]*startServer/);
+  assert.equal(await read('build.js'), 'my own build');
+  assert.match(update.stdout, /build\.js kept/);
+  assert.equal(await read('README.md'), 'my readme');
+
+  const forced = spawnSync(process.execPath, [cli, 'update', '--force'], { cwd: root, encoding: 'utf8' });
+  assert.equal(forced.status, 0, forced.stderr);
+  assert.match(await read('build.js'), /buildSite/);
+  assert.equal(await read('README.md'), 'my readme');
+});

@@ -77,3 +77,21 @@ test('buildSite refuses a private site before cleaning the output directory', as
   await buildSite({ configPath: path.join(root, 'kb.config.json') });
   assert.match(await fs.readFile(path.join(root, 'site', 'index.html'), 'utf8'), /Private fixture sentinel/);
 });
+
+test('a document that fails to render answers 500 without details; a missing one answers 404', async t => {
+  const root = await project(t, []);
+  const failing = { id: 'failing', contentRenderers: [{ id: 'failing-md', matches: file => file.endsWith('broken.md'),
+    render: async () => { throw new Error('internal detail'); } }] };
+  await fs.writeFile(path.join(root, 'content', 'broken.md'), '# Broken');
+  const original = console.error;
+  console.error = () => {};
+  t.after(() => { console.error = original; });
+  const request = await listen(t, createApp({ configPath: path.join(root, 'kb.config.json'), plugins: [failing] }));
+  for (const route of ['/broken.md', '/content/broken.md']) {
+    const response = await request(route);
+    assert.equal(response.status, 500, route);
+    assert.doesNotMatch(await response.text(), /internal detail/);
+  }
+  assert.equal((await request('/content/missing.md')).status, 404);
+  assert.equal((await request('/missing.md')).status, 404);
+});
