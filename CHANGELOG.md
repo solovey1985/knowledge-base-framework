@@ -4,6 +4,14 @@ All notable changes to this project are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres
 to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.0.0-rc.19] - 2026-11-14
+
+- Load local OBJ materials and textures and render OBJ faces from both sides.
+- Add lighting, material, shading, and edge controls to the 3D viewer.
+- Add first-person navigation with WASD, mouse look, and E/Q for elevation.
+  Touch controls provide movement, drag-to-look, elevation, and an exit button.
+- Unreference the development content watcher so it does not keep the process running.
+
 ## [2.0.0-rc.18] - 2026-11-12
 
 First release candidate of the 2.0 line. It is a large step from 1.0.x: a plugin

@@ -40,8 +40,9 @@ test('backlinks list every note that links here, by wiki link or Markdown link',
   const house = (await kb.renderContent('projects/house.md')).htmlContent;
   const section = house.match(/<section class="kb-backlinks">[\s\S]*<\/section>/)[0];
   assert.match(section, /<h2>Згадки<\/h2>/);
-  assert.deepEqual([...section.matchAll(/<a href="([^"]+)">([^<]+)<\/a>/g)].map(match => [match[1], match[2]]),
-    [['/index.md', 'Home'], ['/projects/kamin.md', 'Камін']]);
+  const links = new Map([...section.matchAll(/<a href="([^"]+)">([^<]+)<\/a>/g)]
+    .map(match => [match[1], match[2]]));
+  assert.deepEqual(links, new Map([['/index.md', 'Home'], ['/projects/kamin.md', 'Камін']]));
   const boiler = (await kb.renderContent('areas/boiler.md')).htmlContent;
   assert.match(boiler, /kb-backlinks[\s\S]*href="\/projects\/house\.md">Будинок</);
   assert.doesNotMatch((await kb.renderContent('archive/kamin.md')).htmlContent, /kb-backlinks/);

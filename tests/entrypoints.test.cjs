@@ -19,6 +19,7 @@ async function project(t, plugins) {
 }
 
 async function listen(t, app) {
+  t.after(() => app.locals.knowledgeBase.close());
   const server = app.listen(0, '127.0.0.1');
   await new Promise(resolve => server.once('listening', resolve));
   t.after(() => new Promise(resolve => { server.closeAllConnections?.(); server.close(resolve); }));
@@ -114,6 +115,7 @@ test('navigation is scanned once per build and refreshed after invalidation', as
   assert.equal(buildCalls(), 1);
 
   const server = new KnowledgeBase({ contentRootPath });
+  t.after(() => server.close());
   const titles = async () => (await server.renderContent('index.md')).navigation.map(item => item.path);
   assert.deepEqual(await titles(), ['index.md']);
   await fs.writeFile(path.join(contentRootPath, 'added.md'), '# Added');
